@@ -1,7 +1,10 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
-import { db } from "@/lib/firebase";
+import { db, isConfigValid, isFirebaseReady } from "@/lib/firebase";
 import { collection, query as fbQuery, where, getDocs } from "firebase/firestore";
+import { AlertCircle, Terminal } from "lucide-react";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
 
 interface User {
   displayName: string;
@@ -54,7 +57,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const isDemoMode = import.meta.env.VITE_FIREBASE_API_KEY?.includes("your_") || 
                        !import.meta.env.VITE_FIREBASE_API_KEY;
 
-    if (!isDemoMode && username.includes("@")) {
+    if (!isDemoMode && username.includes("@") && db) {
       // Check Firestore only if Firebase is probably configured
       try {
         const colRef = collection(db, "globiliveSuperAdmins");
@@ -140,6 +143,58 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.removeItem("globilive_user");
     navigate("/login");
   };
+
+  if (!isConfigValid || !isFirebaseReady) {
+    const missingVars = [];
+    if (!import.meta.env.VITE_FIREBASE_API_KEY) missingVars.push("API_KEY");
+    if (!import.meta.env.VITE_FIREBASE_PROJECT_ID) missingVars.push("PROJECT_ID");
+    if (!import.meta.env.VITE_FIREBASE_APP_ID) missingVars.push("APP_ID");
+    if (!import.meta.env.VITE_FIREBASE_DATABASE_URL) missingVars.push("DATABASE_URL");
+
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-950 p-4">
+        <div className="max-w-md w-full space-y-6 text-center">
+          <div className="flex justify-center flex-col items-center">
+             <div className="w-16 h-16 bg-red-500/10 rounded-full flex items-center justify-center mb-4">
+                <AlertCircle className="w-8 h-8 text-red-500" />
+             </div>
+             <h1 className="text-2xl font-bold text-white mb-2">System Configuration Error</h1>
+             <p className="text-slate-400 mb-6">
+               {!isConfigValid 
+                 ? "Firebase configuration is missing or invalid in your environment."
+                 : "Firebase initialized but some services failed to start. Check your console for details."}
+             </p>
+          </div>
+          
+          {missingVars.length > 0 && (
+            <Alert variant="destructive" className="bg-red-500/5 border-red-500/20 text-left">
+              <Terminal className="h-4 w-4" />
+              <AlertTitle>Missing Variables</AlertTitle>
+              <AlertDescription>
+                The following required variables are missing in Vercel:
+                <ul className="list-disc list-inside mt-2 text-xs font-mono">
+                  {missingVars.map(v => <li key={v} className="text-red-400">{v}</li>)}
+                </ul>
+              </AlertDescription>
+            </Alert>
+          )}
+
+          <div className="pt-4 space-y-3">
+            <Button 
+              variant="default" 
+              className="w-full gradient-primary"
+              onClick={() => window.location.reload()}
+            >
+              Retry Connection
+            </Button>
+            <p className="text-[10px] text-slate-500 uppercase tracking-widest font-bold">
+              Check Vercel Project Settings {" > "} Environment Variables
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <AuthContext.Provider value={{ user, loading, login, logout }}>

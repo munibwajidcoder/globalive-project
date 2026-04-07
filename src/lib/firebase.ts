@@ -18,33 +18,55 @@ const firebaseConfig = {
 // Check if critical config properties are present
 const isConfigValid = !!(firebaseConfig.apiKey && firebaseConfig.projectId && firebaseConfig.appId && !firebaseConfig.apiKey.includes("your_"));
 
-let app: any;
-let auth: any;
-let rtdb: any;
-let db: any;
-let storage: any;
+let isFirebaseReady = false;
+let app: any = null;
+let auth: any = null;
+let rtdb: any = null;
+let db: any = null;
+let storage: any = null;
 
 if (isConfigValid) {
   try {
-    console.log("Firebase: Configuration found, initializing...");
+    console.log("Firebase: Initializing app...");
     app = initializeApp(firebaseConfig);
-    auth = getAuth(app);
-    rtdb = getDatabase(app);
-    db = getFirestore(app);
-    storage = getStorage(app);
-    console.log("Firebase: Initialization successful.");
+    
+    try {
+      auth = getAuth(app);
+      console.log("Firebase: Auth initialized.");
+    } catch (e) {
+      console.error("Firebase: Auth failed:", e);
+    }
+    
+    try {
+      rtdb = getDatabase(app);
+      console.log("Firebase: RTDB initialized.");
+    } catch (e) {
+      console.error("Firebase: RTDB failed:", e);
+    }
+    
+    try {
+      db = getFirestore(app);
+      console.log("Firebase: Firestore initialized.");
+    } catch (e) {
+      console.error("Firebase: Firestore failed:", e);
+    }
+    
+    try {
+      storage = getStorage(app);
+      console.log("Firebase: Storage initialized.");
+    } catch (e) {
+      console.error("Firebase: Storage failed:", e);
+    }
+    
+    // Consider it ready if at least the app and Firestore/Auth are initialized
+    isFirebaseReady = !!(app && (db || auth));
+    console.log("Firebase: Initialization status:", isFirebaseReady ? "Ready" : "Failed");
   } catch (error) {
-    console.error("Firebase: Initialization failed:", error);
+    console.error("Firebase: Root initialization failed:", error);
   }
 } else {
   console.warn("Firebase: Configuration is missing or using placeholders! Please check your Vercel Environment Variables.");
-  console.log("Firebase: Running in safe fallback mode.");
-  // Provide empty objects to avoid crashing the whole app during module load
-  auth = { currentUser: null } as any;
-  rtdb = {} as any;
-  db = {} as any;
-  storage = {} as any;
 }
 
-export { auth, rtdb, db, storage };
+export { auth, rtdb, db, storage, isConfigValid, isFirebaseReady };
 export default app;
