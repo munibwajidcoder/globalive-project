@@ -5,37 +5,43 @@ import { getFirestore } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
 
 const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY as string,
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN as string,
-  databaseURL: import.meta.env.VITE_FIREBASE_DATABASE_URL as string,
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID as string,
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET as string,
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID as string,
-  appId: import.meta.env.VITE_FIREBASE_APP_ID as string,
-  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID as string,
+  apiKey: (import.meta.env.VITE_FIREBASE_API_KEY || "").trim(),
+  authDomain: (import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || "").trim(),
+  databaseURL: (import.meta.env.VITE_FIREBASE_DATABASE_URL || "").trim(),
+  projectId: (import.meta.env.VITE_FIREBASE_PROJECT_ID || "").trim(),
+  storageBucket: (import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || "").trim(),
+  messagingSenderId: (import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "").trim(),
+  appId: (import.meta.env.VITE_FIREBASE_APP_ID || "").trim(),
+  measurementId: (import.meta.env.VITE_FIREBASE_MEASUREMENT_ID || "").trim(),
 };
 
 // Check if critical config properties are present
-const isConfigValid = firebaseConfig.apiKey && firebaseConfig.projectId && firebaseConfig.appId;
+const isConfigValid = !!(firebaseConfig.apiKey && firebaseConfig.projectId && firebaseConfig.appId && !firebaseConfig.apiKey.includes("your_"));
 
-let app;
-try {
-  if (!isConfigValid) {
-    console.error("Firebase configuration is missing in .env file! Please check the README and populate your VITE_FIREBASE_* variables.");
-    // We still initialize with whatever we have to avoid breaking the module export, but it might fail later.
-    // Or we can return a mock if it strictly crashes.
+let app: any;
+let auth: any;
+let rtdb: any;
+let db: any;
+let storage: any;
+
+if (isConfigValid) {
+  try {
     app = initializeApp(firebaseConfig);
-  } else {
-    app = initializeApp(firebaseConfig);
+    auth = getAuth(app);
+    rtdb = getDatabase(app);
+    db = getFirestore(app);
+    storage = getStorage(app);
+  } catch (error) {
+    console.error("Firebase initialization failed:", error);
   }
-} catch (error) {
-  console.error("Firebase initialization failed:", error);
-  // Attempt to initialize anyway to keep exports satisfied, or handle gracefully
+} else {
+  console.error("Firebase configuration is missing or using placeholders! Please set your VITE_FIREBASE_* variables in your .env or Vercel settings.");
+  // Provide empty objects to avoid crashing the whole app during module load
+  auth = { currentUser: null } as any;
+  rtdb = {} as any;
+  db = {} as any;
+  storage = {} as any;
 }
 
-export const auth = getAuth(app);
-export const rtdb = getDatabase(app);
-export const db = getFirestore(app);
-export const storage = getStorage(app);
-
+export { auth, rtdb, db, storage };
 export default app;
