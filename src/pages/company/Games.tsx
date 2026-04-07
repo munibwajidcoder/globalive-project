@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { MetricCard } from "@/components/MetricCard";
@@ -8,7 +8,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import EnhancedTable from "@/components/ui/EnhancedTable";
 import { TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Gamepad2, Sparkles, Users, TrendingUp, Eye } from "lucide-react";
+import { Gamepad2, Sparkles, Users, TrendingUp, Eye, Loader2, Calendar, Target, Activity } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from "@/components/ui/dialog";
+import { db } from "@/lib/firebase";
+import { collection, addDoc, serverTimestamp, onSnapshot, query, orderBy } from "firebase/firestore";
+import { toast } from "sonner";
 
 const featuredGames = [
   {
@@ -84,6 +88,12 @@ const statusBadgeVariant: Record<string, "default" | "secondary" | "outline"> = 
 };
 
 export default function CompanyGames() {
+  const [performanceOpen, setPerformanceOpen] = useState(false);
+  const [selectedGame, setSelectedGame] = useState<any>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [draftTitle, setDraftTitle] = useState("");
+  const [draftDate, setDraftDate] = useState("");
+
   const totals = useMemo(() => {
     const totalHosts = catalog.reduce((sum, game) => sum + game.hostParticipation, 0);
     const totalUsers = catalog.reduce((sum, game) => sum + game.activeUsers, 0);
@@ -91,6 +101,36 @@ export default function CompanyGames() {
 
     return { totalHosts, totalUsers, beanMonetised };
   }, []);
+
+  const handleCreateDraft = async () => {
+    if (!draftTitle || !draftDate) {
+      toast.error("Please fill in both the title and target date");
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      await addDoc(collection(db, "globiliveGameDrafts"), {
+        title: draftTitle,
+        targetDate: draftDate,
+        status: "Draft",
+        createdAt: serverTimestamp(),
+      });
+      toast.success("Draft brief created successfully!");
+      setDraftTitle("");
+      setDraftDate("");
+    } catch (error) {
+      console.error("Error creating draft:", error);
+      toast.error("Failed to create draft");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const openPerformance = (game: any) => {
+    setSelectedGame(game);
+    setPerformanceOpen(true);
+  };
 
   return (
     <DashboardLayout role="company">
@@ -149,7 +189,12 @@ export default function CompanyGames() {
                 <p className="text-sm text-muted-foreground">
                   {game.activeHosts} active hosts • Avg revenue ${game.avgRevenue.toLocaleString()}
                 </p>
-                <Button size="sm" variant="outline" className="w-full">
+                <Button 
+                  size="sm" 
+                  variant="outline" 
+                  className="w-full border-primary/20 text-primary hover:bg-primary/5"
+                  onClick={() => openPerformance(game)}
+                >
                   <Eye className="mr-2 h-4 w-4" /> View performance
                 </Button>
               </div>
@@ -194,26 +239,106 @@ export default function CompanyGames() {
             />
           </CardContent>
         </Card>
-
-        <Card>
+        <Card className="border-none shadow-premium bg-card/50">
           <CardHeader>
             <CardTitle>Plan new release</CardTitle>
             <CardDescription>Capture working title and expected launch to brief the content team.</CardDescription>
           </CardHeader>
-          <CardContent className="grid gap-4 md:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="working-title">Working title</Label>
-              <Input id="working-title" placeholder="Project Aurora" />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="target-date">Target launch date</Label>
-              <Input id="target-date" type="date" />
-            </div>
-            <div className="space-y-2 md:col-span-2">
-              <Button className="w-full md:w-fit">Create draft brief</Button>
+          <CardContent>
+            <div className="space-y-4 md:col-span-2">
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="working-title">Working title</Label>
+                  <Input 
+                    id="working-title" 
+                    placeholder="Project Aurora" 
+                    value={draftTitle}
+                    onChange={(e) => setDraftTitle(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="target-date">Target launch date</Label>
+                  <Input 
+                    id="target-date" 
+                    type="date" 
+                    value={draftDate}
+                    onChange={(e) => setDraftDate(e.target.value)}
+                  />
+                </div>
+              </div>
+              <Button 
+                className="w-full md:w-fit gradient-primary shadow-glow" 
+                onClick={handleCreateDraft}
+                disabled={isSubmitting}
+              >
+                {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                Create draft brief
+              </Button>
             </div>
           </CardContent>
         </Card>
+
+        {/* Performance Modal */}
+        <Dialog open={performanceOpen} onOpenChange={setPerformanceOpen}>
+          <DialogContent className="max-w-2xl bg-background/95 backdrop-blur-xl border-none shadow-premium">
+            <DialogHeader>
+              <DialogTitle className="text-2xl font-bold flex items-center gap-2">
+                <Activity className="w-6 h-6 text-primary" />
+                Performance: {selectedGame?.title || selectedGame?.name}
+              </DialogTitle>
+              <DialogDescription>
+                Detailed breakdown of host engagement and monetisation trends.
+              </DialogDescription>
+            </DialogHeader>
+            
+            <div className="grid gap-4 py-4 md:grid-cols-3">
+              <div className="p-4 rounded-xl bg-muted/30 border border-border/40">
+                <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-1">Retention</p>
+                <p className="text-2xl font-black text-emerald-500">84.2%</p>
+                <p className="text-[10px] text-muted-foreground mt-1">High engagement index</p>
+              </div>
+              <div className="p-4 rounded-xl bg-muted/30 border border-border/40">
+                <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-1">Peak Concurrent</p>
+                <p className="text-2xl font-black text-primary">12.4K</p>
+                <p className="text-[10px] text-muted-foreground mt-1">Saturday PM prime time</p>
+              </div>
+              <div className="p-4 rounded-xl bg-muted/30 border border-border/40">
+                <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-1">Growth</p>
+                <p className="text-2xl font-black text-blue-500">+12%</p>
+                <p className="text-[10px] text-muted-foreground mt-1">MoM participation rise</p>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <div className="p-4 rounded-xl bg-primary/5 border border-primary/10">
+                <h5 className="font-bold mb-2 flex items-center gap-2">
+                  <Target className="w-4 h-4 text-primary" />
+                  Quarterly Goals
+                </h5>
+                <p className="text-sm text-muted-foreground leading-relaxed">
+                  The goal is to increase host participation by 15% through targeted bean promotions and exclusive streamer badges. Current roadmap suggests a V2 update in mid-Q3.
+                </p>
+              </div>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div className="p-4 rounded-xl border border-border/40">
+                  <p className="text-xs font-bold mb-1">Top Region</p>
+                  <p className="text-sm font-semibold">South East Asia</p>
+                </div>
+                <div className="p-4 rounded-xl border border-border/40">
+                  <p className="text-xs font-bold mb-1">Top Earner</p>
+                  <p className="text-sm font-semibold">@StarHost_01</p>
+                </div>
+              </div>
+            </div>
+
+            <DialogFooter>
+              <DialogClose asChild>
+                <Button variant="secondary">Done</Button>
+              </DialogClose>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </DashboardLayout>
   );

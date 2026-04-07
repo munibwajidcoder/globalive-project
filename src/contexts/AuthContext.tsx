@@ -40,16 +40,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
 
   useEffect(() => {
-    const storedUser = localStorage.getItem("globilive_user");
-    if (storedUser) {
-      try {
-        setUser(JSON.parse(storedUser));
-      } catch (e) {
-        console.error("Failed to parse stored user", e);
-        localStorage.removeItem("globilive_user");
+    const checkSession = async () => {
+      const storedUser = localStorage.getItem("globilive_user");
+      if (storedUser) {
+        try {
+          const parsed = JSON.parse(storedUser);
+          if (parsed && parsed.role && parsed.username) {
+            setUser(parsed);
+          } else {
+            localStorage.removeItem("globilive_user");
+          }
+        } catch (e) {
+          console.error("Failed to parse stored user", e);
+          localStorage.removeItem("globilive_user");
+        }
       }
-    }
-    setLoading(false);
+      setLoading(false);
+    };
+
+    checkSession();
   }, []);
 
   const login = async (username: string, password: string): Promise<boolean> => {
