@@ -26,16 +26,19 @@ let storage: any;
 
 if (isConfigValid) {
   try {
+    console.log("Firebase: Configuration found, initializing...");
     app = initializeApp(firebaseConfig);
     auth = getAuth(app);
     rtdb = getDatabase(app);
     db = getFirestore(app);
     storage = getStorage(app);
+    console.log("Firebase: Initialization successful.");
   } catch (error) {
-    console.error("Firebase initialization failed:", error);
+    console.error("Firebase: Initialization failed:", error);
   }
 } else {
-  console.error("Firebase configuration is missing or using placeholders! Please set your VITE_FIREBASE_* variables in your .env or Vercel settings.");
+  console.warn("Firebase: Configuration is missing or using placeholders! Please check your Vercel Environment Variables.");
+  console.log("Firebase: Running in safe fallback mode.");
   // Provide empty objects to avoid crashing the whole app during module load
   auth = { currentUser: null } as any;
   rtdb = {} as any;

@@ -1,5 +1,7 @@
 import { DashboardLayout } from "@/components/DashboardLayout";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { collection, onSnapshot, query as fbQuery, orderBy } from "firebase/firestore";
+import { db } from "@/lib/firebase";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import EnhancedTable from "@/components/ui/EnhancedTable";
 import { TableRow, TableCell, TableHead, TableHeader } from "@/components/ui/table";
@@ -18,29 +20,34 @@ import {
 import { toast } from "@/components/ui/use-toast";
 import { FileText, RotateCcw } from "lucide-react";
 
-const mockBeanTransactions = [
-  { id: "TX-B1001", date: "2024-10-23T10:00:00Z", type: "Top-up", source: "Super Admin (Admin1)", amount: 100000, status: "Completed", hostName: "-", userId: "SA-001", agencyName: "-", agencyCode: "-", ip: "192.168.1.1" },
-  { id: "TX-B1002", date: "2024-10-23T11:30:00Z", type: "Assigned", source: "Top-up Agent (AgentX)", amount: 50000, status: "Completed", hostName: "User123", userId: "U-001", agencyName: "Star Agency", agencyCode: "AG-100", ip: "10.0.0.5" },
-  { id: "TX-B1003", date: "2024-10-23T14:15:00Z", type: "Generated", source: "Company Admin", amount: 1500000, status: "Completed", hostName: "-", userId: "-", agencyName: "-", agencyCode: "-", ip: "System" },
-];
-
-const mockDiamondTransactions = [
-  { id: "TX-D2001", date: "2024-10-23T12:00:00Z", type: "Gift Sent", source: "User (Mike)", amount: 500, status: "Completed", hostName: "AliceLive", userId: "U-042", agencyName: "Galaxy Agency", agencyCode: "AG-102", ip: "172.16.0.4" },
-  { id: "TX-D2002", date: "2024-10-23T13:00:00Z", type: "Gift Received", source: "User (Anonymous)", amount: 1000, status: "Completed", hostName: "BobStream", userId: "U-088", agencyName: "None", agencyCode: "None", ip: "172.16.1.9" },
-];
-
-const mockWithdrawalTransactions = [
-  { id: "TX-W3001", date: "2024-10-22T15:00:00Z", type: "Cash-out", source: "Host (AliceLive)", amount: 500, status: "Pending", hostName: "AliceLive", userId: "U-042", agencyName: "Galaxy Agency", agencyCode: "AG-102", ip: "203.0.113.1" },
-  { id: "TX-W3002", date: "2024-10-23T16:00:00Z", type: "Cash-out", source: "Agency (Star Agency)", amount: 1200, status: "Completed", hostName: "-", userId: "AG-100", agencyName: "Star Agency", agencyCode: "AG-100", ip: "198.51.100.5" },
-];
-
-const mockDiamondToBeanTransactions = [
-  { id: "TX-C4001", date: "2024-10-23T18:00:00Z", type: "Conversion", source: "Host (AliceLive)", amount: 1000, beans: 800, commission: "20%", status: "Completed", hostName: "AliceLive", userId: "U-042", agencyName: "Galaxy Agency", agencyCode: "AG-102", ip: "203.0.113.1" },
-];
+// Mock transaction data removed for Firestore integration
 
 export default function CompanyTransactions() {
   const [selectedTx, setSelectedTx] = useState<any | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [beanTxs, setBeanTxs] = useState<any[]>([]);
+  const [diamondTxs, setDiamondTxs] = useState<any[]>([]);
+  const [withdrawalTxs, setWithdrawalTxs] = useState<any[]>([]);
+  const [conversionTxs, setConversionTxs] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const qBeans = fbQuery(collection(db, "globiliveBeanTransactions"), orderBy("date", "desc"));
+    const unsubBeans = onSnapshot(qBeans, (snap) => setBeanTxs(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
+
+    const qDiamonds = fbQuery(collection(db, "globiliveDiamondTransactions"), orderBy("date", "desc"));
+    const unsubDiamonds = onSnapshot(qDiamonds, (snap) => setDiamondTxs(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
+
+    const qWithdrawals = fbQuery(collection(db, "globiliveCashouts"), orderBy("date", "desc"));
+    const unsubWithdrawals = onSnapshot(qWithdrawals, (snap) => setWithdrawalTxs(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
+
+    const qConversions = fbQuery(collection(db, "globiliveConversions"), orderBy("date", "desc"));
+    const unsubConversions = onSnapshot(qConversions, (snap) => setConversionTxs(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
+
+    return () => {
+      unsubBeans(); unsubDiamonds(); unsubWithdrawals(); unsubConversions();
+    };
+  }, []);
 
   const handleDetails = (tx: any) => {
     setSelectedTx(tx);
@@ -85,7 +92,7 @@ export default function CompanyTransactions() {
 
               <TabsContent value="beans" className="space-y-4">
                 <EnhancedTable
-                  data={mockBeanTransactions}
+                  data={beanTxs}
                   pageSize={10}
                   searchKeys={["source", "hostName", "userId", "agencyName", "agencyCode", "id"]}
                   filterSchema={[
@@ -126,7 +133,7 @@ export default function CompanyTransactions() {
 
               <TabsContent value="diamonds" className="space-y-4">
                  <EnhancedTable
-                  data={mockDiamondTransactions}
+                  data={diamondTxs}
                   pageSize={10}
                   searchKeys={["source", "hostName", "userId", "agencyName", "agencyCode", "id"]}
                   filterSchema={[
@@ -167,7 +174,7 @@ export default function CompanyTransactions() {
 
               <TabsContent value="withdrawals" className="space-y-4">
                  <EnhancedTable
-                  data={mockWithdrawalTransactions}
+                  data={withdrawalTxs}
                   pageSize={10}
                   searchKeys={["source", "hostName", "userId", "agencyName", "id"]}
                   filterSchema={[
@@ -215,7 +222,7 @@ export default function CompanyTransactions() {
 
                <TabsContent value="conversions" className="space-y-4">
                  <EnhancedTable
-                  data={mockDiamondToBeanTransactions}
+                  data={conversionTxs}
                   pageSize={10}
                   searchKeys={["source", "hostName", "userId", "agencyName", "id"]}
                   columns={

@@ -31,6 +31,7 @@ type EnhancedTableProps<T> = {
   filterSchema?: FilterField[]; 
   className?: string;
   hideSearch?: boolean;
+  loading?: boolean;
 };
 
 export function EnhancedTable<T>({
@@ -42,6 +43,7 @@ export function EnhancedTable<T>({
   filterSchema,
   className,
   hideSearch = false,
+  loading = false,
 }: EnhancedTableProps<T>) {
   const [query, setQuery] = useState("");
   const [fieldFilters, setFieldFilters] = useState<Record<string, string>>({});
@@ -143,7 +145,16 @@ export function EnhancedTable<T>({
           <Table>
             {columns}
             <TableBody>
-              {filtered.length === 0 ? (
+              {loading ? (
+                <tr>
+                    <td colSpan={100} className="text-center py-20 bg-muted/5">
+                        <div className="flex flex-col items-center gap-3">
+                            <div className="w-10 h-10 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+                            <p className="text-sm font-medium text-muted-foreground animate-pulse">Synchronizing with live data...</p>
+                        </div>
+                    </td>
+                </tr>
+              ) : filtered.length === 0 ? (
                 <tr>
                   <td colSpan={100} className="text-center text-muted-foreground py-12 bg-muted/10">
                     <div className="flex flex-col items-center gap-2">

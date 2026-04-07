@@ -52,13 +52,25 @@ export default function CompanyDashboard() {
     setBlockedUsersCount(14);
     setBlockedHostsCount(3);
     const usersRef = collection(db, "globiliveUsers");
-    const unsub = onSnapshot(usersRef, (snap) => setTotalUsers(snap.size));
+    const unsub = onSnapshot(usersRef, 
+      (snap) => setTotalUsers(snap.size),
+      (error) => {
+        console.error("Dashboard: Error fetching users count:", error);
+        setTotalUsers(0); // Fallback to 0
+      }
+    );
     return () => unsub();
   }, []);
 
   useEffect(() => {
     const ref = collection(db, "globiliveSuperAdmins");
-    const unsub = onSnapshot(ref, (snap) => setTotalSuperAdmins(snap.size));
+    const unsub = onSnapshot(ref, 
+      (snap) => setTotalSuperAdmins(snap.size),
+      (error) => {
+        console.error("Dashboard: Error fetching super-admins count:", error);
+        setTotalSuperAdmins(0); // Fallback to 0
+      }
+    );
     return () => unsub();
   }, []);
 

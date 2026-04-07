@@ -70,7 +70,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           return true;
         }
       } catch (e) {
-        console.error("error checking super-admin email", e);
+        console.error("AuthContext: Super-admin check failed:", e);
       }
 
       // Check sub-admins stored in Firestore
@@ -91,7 +91,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           return false;
         }
       } catch (e) {
-        console.error("error checking sub-admin email", e);
+        console.error("AuthContext: Sub-admin check failed:", e);
       }
 
       // Check agency owners from Firestore
@@ -113,7 +113,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           return false;
         }
       } catch (e) {
-        console.error("error checking agency credentials", e);
+        console.error("AuthContext: Agency check failed:", e);
       }
     }
 

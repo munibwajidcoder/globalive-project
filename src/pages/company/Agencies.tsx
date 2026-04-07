@@ -1,18 +1,19 @@
-
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { useState, useEffect } from "react";
 import { db } from "@/lib/firebase";
-import { collection, onSnapshot, updateDoc, doc } from "firebase/firestore";
+import { collection, onSnapshot, updateDoc, doc, addDoc } from "firebase/firestore";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import EnhancedTable from "@/components/ui/EnhancedTable";
 import { TableRow, TableCell, TableHead, TableHeader, Table, TableBody } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { MoreHorizontal, Eye, UserCheck, UserX, ArrowRightLeft, XCircle } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { MoreHorizontal, Eye, UserCheck, UserX, ArrowRightLeft, XCircle, PlusCircle, EyeOff } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from "@/components/ui/dialog";
 import { toast } from "@/components/ui/use-toast";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useAuth } from "@/contexts/AuthContext";
 
 
 
@@ -22,6 +23,15 @@ export default function CompanyAgencies() {
   const [agencies, setAgencies] = useState<any[]>([]);
   const [viewingAgency, setViewingAgency] = useState<any | null>(null);
   const [viewingHost, setViewingHost] = useState<any | null>(null);
+  const { user } = useAuth();
+
+  const [addAgencyOpen, setAddAgencyOpen] = useState(false);
+  const [newAgencyName, setNewAgencyName] = useState("");
+  const [newAgencyRegion, setNewAgencyRegion] = useState("");
+  const [newAgencyEmail, setNewAgencyEmail] = useState("");
+  const [newAgencyPassword, setNewAgencyPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [isCreatingAgency, setIsCreatingAgency] = useState(false);
 
   const openAgencyView = (agency: any) => {
       setViewingAgency(agency)
@@ -78,21 +88,58 @@ export default function CompanyAgencies() {
       toast({title: "Host Approved"})
   }
 
-    const handleBlockHost = (hostId: number) => {
-      const updatedAgency = { ...viewingAgency, hosts: viewingAgency.hosts.map((h:any) => h.id === hostId ? { ...h, status: h.status === 'Blocked' ? 'Approved' : 'Blocked' } : h) };
-      setAgencies(agencies.map(a => a.id === updatedAgency.id ? updatedAgency : a));
-      setViewingAgency(updatedAgency);
-      toast({title: `Host ${updatedAgency.hosts.find((h:any) => h.id === hostId)?.status === 'Blocked' ? 'Blocked' : 'Unblocked'}`})
-  }
+  const handleAddAgency = async () => {
+    if (!newAgencyName.trim() || !newAgencyEmail.trim() || !newAgencyPassword) {
+      toast({ title: "Missing Information", description: "Name, email, and password are required.", variant: "destructive" });
+      return;
+    }
 
-  
+    setIsCreatingAgency(true);
+    try {
+      const generatedCode = `GLB-${new Date().getFullYear()}-A${String(Date.now()).slice(-3)}`;
+      const agencyPayload = {
+          name: newAgencyName.trim(),
+          agencyName: newAgencyName.trim(),
+          region: newAgencyRegion.trim() || "Global",
+          status: "Active",
+          code: generatedCode,
+          agencyCode: generatedCode,
+          contactEmail: newAgencyEmail.trim(),
+          password: newAgencyPassword,
+          sharePercent: 0,
+          agencyHosts: [],
+          createdAt: Date.now(),
+          totalRevenue: "0",
+          creator: { creatorEmail: user?.username ?? "company-admin", creatorId: "company" }
+      };
+
+      await addDoc(collection(db, "globiliveAgencies"), agencyPayload);
+      toast({ title: "Agency Created", description: `${newAgencyName} has been added.` });
+      setAddAgencyOpen(false);
+      setNewAgencyName("");
+      setNewAgencyEmail("");
+      setNewAgencyPassword("");
+      setNewAgencyRegion("");
+    } catch (err) {
+      console.error("create agency error", err);
+      toast({ title: "Create Failed", description: "Unable to create agency.", variant: "destructive" });
+    } finally {
+      setIsCreatingAgency(false);
+    }
+  };
+
 
   return (
     <DashboardLayout role="company">
       <div className="space-y-6 animate-fade-in">
-        <div>
-          <h2 className="text-3xl font-bold">Agencies</h2>
-          <p className="text-muted-foreground mt-1">All agencies registered on the platform</p>
+        <div className="flex justify-between items-center">
+          <div>
+            <h2 className="text-3xl font-bold">Agencies</h2>
+            <p className="text-muted-foreground mt-1">All agencies registered on the platform</p>
+          </div>
+          <Button className="gradient-primary shadow-glow" onClick={() => setAddAgencyOpen(true)}>
+            <PlusCircle className="mr-2 h-4 w-4" /> Add Agency
+          </Button>
         </div>
 
         <Card className="border-none shadow-premium bg-card/50">
@@ -221,6 +268,53 @@ export default function CompanyAgencies() {
 
       
 
+      {/* Add Agency Dialog */}
+      <Dialog open={addAgencyOpen} onOpenChange={setAddAgencyOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Add New Agency</DialogTitle>
+            <DialogDescription>Create a new agency account for the platform.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <label className="text-sm font-semibold">Agency Name</label>
+              <Input placeholder="e.g. Dream Streams" value={newAgencyName} onChange={e => setNewAgencyName(e.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-semibold">Contact Email</label>
+              <Input placeholder="agency@example.com" type="email" value={newAgencyEmail} onChange={e => setNewAgencyEmail(e.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-semibold">Region</label>
+              <Input placeholder="e.g. Europe" value={newAgencyRegion} onChange={e => setNewAgencyRegion(e.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-semibold">Password</label>
+              <div className="relative">
+                <Input
+                  type={showPassword ? "text" : "password"}
+                  value={newAgencyPassword}
+                  onChange={e => setNewAgencyPassword(e.target.value)}
+                  placeholder="••••••••"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+                >
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAddAgencyOpen(false)}>Cancel</Button>
+            <Button onClick={handleAddAgency} disabled={isCreatingAgency}>
+              {isCreatingAgency ? "Creating..." : "Create Agency"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </DashboardLayout>
   );
 }

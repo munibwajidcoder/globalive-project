@@ -21,6 +21,8 @@ import {
   UserMinus,
   PlusCircle,
   Link as LinkIcon,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 import {
   Dialog,
@@ -80,6 +82,9 @@ export default function TopupAgents() {
   const [actionType, setActionType] = useState<"Reject" | "Block" | "Unblock" | null>(null);
   const [addAgentOpen, setAddAgentOpen] = useState(false);
   const [newAgentName, setNewAgentName] = useState("");
+  const [newAgentEmail, setNewAgentEmail] = useState("");
+  const [newAgentPassword, setNewAgentPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
@@ -143,8 +148,8 @@ export default function TopupAgents() {
   };
 
   const handleAddAgent = async () => {
-    if (!newAgentName.trim()) {
-      toast({ title: "Agent name is required", variant: "destructive" });
+    if (!newAgentName.trim() || !newAgentEmail.trim() || !newAgentPassword) {
+      toast({ title: "Required Information", description: "Name, email, and password are required.", variant: "destructive" });
       return;
     }
 
@@ -152,7 +157,9 @@ export default function TopupAgents() {
     try {
       const agentCode = `TPA-${new Date().getFullYear()}-${String(Date.now()).slice(-3)}`;
       await addDoc(collection(db, "globiliveTopUpAgents"), {
-        name: newAgentName,
+        name: newAgentName.trim(),
+        email: newAgentEmail.trim(),
+        password: newAgentPassword,
         code: agentCode,
         resellers: 0,
         totalSales: "$0",
@@ -160,8 +167,10 @@ export default function TopupAgents() {
         createdAt: serverTimestamp(),
       });
       
-      toast({ title: "Top-up Agent Created" });
+      toast({ title: "Top-up Agent Created", description: `${newAgentName} has been added.` });
       setNewAgentName("");
+      setNewAgentEmail("");
+      setNewAgentPassword("");
       setAddAgentOpen(false);
     } catch (error) {
       console.error("Error adding agent:", error);
@@ -355,17 +364,49 @@ export default function TopupAgents() {
             <div className="py-4 space-y-4">
 
               {/* Manual Create */}
-              <div className="p-4 border rounded-md">
-                <h4 className="font-semibold mb-2">Create Manually</h4>
+              <div className="p-4 border rounded-md space-y-4">
+                <h4 className="font-semibold">Create Manually</h4>
 
-                <Input
-                  placeholder="Agent Name"
-                  value={newAgentName}
-                  onChange={(e) => setNewAgentName(e.target.value)}
-                />
+                <div className="space-y-2">
+                  <label className="text-xs font-semibold">Agent Name</label>
+                  <Input
+                    placeholder="e.g. John Doe"
+                    value={newAgentName}
+                    onChange={(e) => setNewAgentName(e.target.value)}
+                  />
+                </div>
 
-                <Button onClick={handleAddAgent} className="w-full mt-4">
-                  Create and Activate Agent
+                <div className="space-y-2">
+                  <label className="text-xs font-semibold">Contact Email</label>
+                  <Input
+                    placeholder="agent@example.com"
+                    type="email"
+                    value={newAgentEmail}
+                    onChange={(e) => setNewAgentEmail(e.target.value)}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-xs font-semibold">Password</label>
+                  <div className="relative">
+                    <Input
+                      placeholder="••••••••"
+                      type={showPassword ? "text" : "password"}
+                      value={newAgentPassword}
+                      onChange={(e) => setNewAgentPassword(e.target.value)}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+                    >
+                      {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                  </div>
+                </div>
+
+                <Button onClick={handleAddAgent} className="w-full mt-2" disabled={isSubmitting}>
+                  {isSubmitting ? "Creating..." : "Create and Activate Agent"}
                 </Button>
               </div>
 

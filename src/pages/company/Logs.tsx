@@ -1,4 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { collection, onSnapshot, query as fbQuery, orderBy } from "firebase/firestore";
+import { db } from "@/lib/firebase";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -32,17 +34,26 @@ type LogEntry = {
   device: string;
 };
 
-const mockLogs: LogEntry[] = [
-  { id: "LOG-9210", timestamp: "2024-04-02 14:15", actor: "Fatima Admin", actorRole: "Company Admin", action: "Approved Bean Request REQ-3206", target: "Agent-008", status: "Success", ipAddress: "192.168.1.1", device: "Chrome / Windows" },
-  { id: "LOG-9209", timestamp: "2024-04-02 13:45", actor: "System", actorRole: "Automation", action: "Auto-suspended User#8842", target: "User#8842", status: "Warning", ipAddress: "-", device: "Server-Node-01" },
-  { id: "LOG-9208", timestamp: "2024-04-02 12:30", actor: "SuperAdmin-Olivia", actorRole: "Super Admin", action: "Modified Agency Commission", target: "Agency-X", status: "Success", ipAddress: "45.12.33.102", device: "Safari / Mac" },
-  { id: "LOG-9207", timestamp: "2024-04-02 11:20", actor: "Unknown", actorRole: "Guest", action: "Failed Login Attempt", target: "Admin Panel", status: "Failed", ipAddress: "88.201.5.12", device: "Firefox / Linux" },
-  { id: "LOG-9206", timestamp: "2024-04-02 10:05", actor: "Company-Dev", actorRole: "Developer", action: "Updated Globalive Rates", target: "System Config", status: "Success", ipAddress: "local", device: "VS Code / API" },
-  { id: "LOG-9205", timestamp: "2024-04-01 23:55", actor: "Agent-008", actorRole: "Top-up Agent", action: "Created Bean Transfer BT-9218", target: "Reseller-A", status: "Success", ipAddress: "103.44.11.2", device: "Mobile App / Android" },
-];
+// Seed data removed for Firestore integration
 
 export default function CompanyLogs() {
   const [searchTerm, setSearchTerm] = useState("");
+  const [logs, setLogs] = useState<LogEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const q = fbQuery(collection(db, "globilivePlatformAuditLogs"), orderBy("timestamp", "desc"));
+    const unsub = onSnapshot(q, (snap) => {
+        const list = snap.docs.map(d => ({
+            id: d.id,
+            ...d.data(),
+            timestamp: (d.data() as any).timestamp?.toDate?.()?.toLocaleString() || (d.data() as any).timestamp
+        })) as LogEntry[];
+        setLogs(list);
+        setLoading(false);
+    });
+    return () => unsub();
+  }, []);
 
   return (
     <DashboardLayout role="company">
@@ -128,7 +139,7 @@ export default function CompanyLogs() {
             </div>
           </CardHeader>
           <EnhancedTable
-            data={mockLogs}
+            data={logs}
             pageSize={10}
             searchKeys={["actor", "action", "status", "id"]}
             filterSchema={[

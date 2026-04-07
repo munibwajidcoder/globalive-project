@@ -151,7 +151,10 @@ export default function SubAdmins() {
             };
           });
           setAdmins(items);
-        }, (err) => console.error('subadmins onSnapshot error', err));
+        }, (err) => {
+          console.error('SubAdmins: onSnapshot error', err);
+          setAdmins([]);
+        });
 
         return () => { mounted = false; unsub(); };
       } catch (e) {
@@ -218,11 +221,17 @@ export default function SubAdmins() {
     setDeleteOpen(true);
   }
 
-  function confirmDelete() {
+  async function confirmDelete() {
     if (deletingId == null) return;
-    setAdmins((prev) => prev.filter((a) => a.id !== deletingId));
-    setDeletingId(null);
-    setDeleteOpen(false);
+    try {
+        await deleteDoc(doc(db, "globiliveSubAdmins", String(deletingId)));
+        setAdmins((prev) => prev.filter((a) => a.id !== deletingId));
+    } catch (err) {
+        console.error("Delete failed", err);
+    } finally {
+        setDeletingId(null);
+        setDeleteOpen(false);
+    }
   }
 
   function openDetails(admin: SubAdmin) {
@@ -235,28 +244,19 @@ export default function SubAdmins() {
     setStatusConfirmOpen(true);
   }
 
-  function confirmStatusChange() {
-    if (!statusTarget) {
-      return;
-    }
-    const nextStatus = statusTarget.status === "Active" ? "Inactive" : "Active";
-    setAdmins((prev) =>
-      prev.map((admin) => (admin.id === statusTarget.id ? { ...admin, status: nextStatus } : admin)),
-    );
-    
-    // Update firestore asynchronously
-    if (typeof statusTarget.id === 'string') {
-        (async () => {
-            try {
-                await updateDoc(doc(db, "globiliveSubAdmins", statusTarget.id), { status: nextStatus });
-            } catch (e) {
-                console.error("failed status update", e);
-            }
-        })();
-    }
+  async function confirmStatusChange() {
+    if (!statusTarget) return;
 
-    setStatusTarget(null);
-    setStatusConfirmOpen(false);
+    const nextStatus = statusTarget.status === "Active" ? "Inactive" : "Active";
+    try {
+        await updateDoc(doc(db, "globiliveSubAdmins", String(statusTarget.id)), { status: nextStatus });
+        // Snapshot will handle the UI update
+    } catch (err) {
+        console.error("failed status update", err);
+    } finally {
+        setStatusTarget(null);
+        setStatusConfirmOpen(false);
+    }
   }
 
   async function handleSubmit(e?: React.FormEvent) {
@@ -411,18 +411,7 @@ export default function SubAdmins() {
                       </DropdownMenuItem>
                       <DropdownMenuSeparator />
                       <DropdownMenuItem
-                        onSelect={async () => {
-                          try {
-                            // attempt to delete from Firestore when id is a string (doc id)
-                            if (typeof admin.id === 'string') {
-                              await deleteDoc(doc(db, "globiliveSubAdmins", admin.id));
-                            }
-                            // remove from local UI state
-                            setAdmins((prev) => prev.filter((a) => a.id !== admin.id));
-                          } catch (err) {
-                            console.error("delete subadmin error", err);
-                          }
-                        }}
+                        onSelect={() => handleDelete(admin.id)}
                         className="text-destructive focus:text-destructive"
                       >
                         <Trash2 className="mr-2 h-4 w-4" /> Delete

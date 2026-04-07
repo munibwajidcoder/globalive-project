@@ -20,7 +20,9 @@ import {
   UserCheck,
   UserMinus,
   PlusCircle,
-  Link as LinkIcon
+  Link as LinkIcon,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 import {
   AlertDialog,
@@ -70,6 +72,9 @@ export default function Resellers() {
 
   const [addResellerOpen, setAddResellerOpen] = useState(false);
   const [newResellerName, setNewResellerName] = useState("");
+  const [newResellerEmail, setNewResellerEmail] = useState("");
+  const [newResellerPassword, setNewResellerPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
@@ -129,8 +134,8 @@ export default function Resellers() {
   };
 
   const handleAddReseller = async () => {
-    if (!newResellerName.trim()) {
-      toast({ title: "Reseller name is required", variant: "destructive" });
+    if (!newResellerName.trim() || !newResellerEmail.trim() || !newResellerPassword) {
+      toast({ title: "Required Information", description: "Name, email, and password are required.", variant: "destructive" });
       return;
     }
 
@@ -138,7 +143,9 @@ export default function Resellers() {
     try {
       const resellerCode = `RES-${new Date().getFullYear()}-${String(Date.now()).slice(-3)}`;
       await addDoc(collection(db, "globiliveResellers"), {
-        name: newResellerName,
+        name: newResellerName.trim(),
+        email: newResellerEmail.trim(),
+        password: newResellerPassword,
         code: resellerCode,
         agent: "Direct (Company)",
         totalSales: "$0",
@@ -146,8 +153,10 @@ export default function Resellers() {
         createdAt: serverTimestamp(),
       });
 
-      toast({ title: "Reseller Created" });
+      toast({ title: "Reseller Created", description: `${newResellerName} has been added.` });
       setNewResellerName("");
+      setNewResellerEmail("");
+      setNewResellerPassword("");
       setAddResellerOpen(false);
     } catch (error) {
       console.error("Error adding reseller:", error);
@@ -329,17 +338,49 @@ export default function Resellers() {
             </DialogHeader>
 
             <div className="py-4 space-y-4">
-              <div className="p-4 border rounded-md">
-                <h4 className="font-semibold mb-2">Create Manually</h4>
+              <div className="p-4 border rounded-md space-y-4">
+                <h4 className="font-semibold">Create Manually</h4>
 
-                <Input
-                  placeholder="Reseller Name"
-                  value={newResellerName}
-                  onChange={e => setNewResellerName(e.target.value)}
-                />
+                <div className="space-y-2">
+                  <label className="text-xs font-semibold">Reseller Name</label>
+                  <Input
+                    placeholder="e.g. Acme Resell"
+                    value={newResellerName}
+                    onChange={e => setNewResellerName(e.target.value)}
+                  />
+                </div>
 
-                <Button onClick={handleAddReseller} className="w-full mt-4">
-                  Create & Activate Reseller
+                <div className="space-y-2">
+                  <label className="text-xs font-semibold">Contact Email</label>
+                  <Input
+                    placeholder="reseller@example.com"
+                    type="email"
+                    value={newResellerEmail}
+                    onChange={e => setNewResellerEmail(e.target.value)}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-xs font-semibold">Password</label>
+                  <div className="relative">
+                    <Input
+                      placeholder="••••••••"
+                      type={showPassword ? "text" : "password"}
+                      value={newResellerPassword}
+                      onChange={e => setNewResellerPassword(e.target.value)}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+                    >
+                      {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                  </div>
+                </div>
+
+                <Button onClick={handleAddReseller} className="w-full mt-2" disabled={isSubmitting}>
+                  {isSubmitting ? "Creating..." : "Create & Activate Reseller"}
                 </Button>
               </div>
 

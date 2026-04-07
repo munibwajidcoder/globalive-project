@@ -1,4 +1,6 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { collection, onSnapshot, query as fbQuery, orderBy, addDoc, updateDoc, doc, arrayUnion, serverTimestamp } from "firebase/firestore";
+import { db } from "@/lib/firebase";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -34,93 +36,7 @@ type Conversation = {
   messages: Message[];
 };
 
-const seedConversations: Conversation[] = [
-  {
-    id: "CONV-2901",
-    subject: "Diamond payout delay",
-    reporterName: "Sarah Johnson",
-    reporterType: "host",
-    reporterContact: "+971 55 123 4567",
-    status: "Open",
-    assignedTo: "Agency Ops Team",
-    lastMessageAt: "2025-11-13T21:30:00Z",
-    messages: [
-      {
-        id: "MSG-1",
-        author: "Sarah Johnson",
-        authorType: "host",
-        body: "Hey team, my withdrawal request from yesterday still shows pending. Can someone confirm the processing time?",
-        sentAt: "2025-11-13T20:05:00Z",
-      },
-      {
-        id: "MSG-2",
-        author: "Agency Support",
-        authorType: "agency",
-        body: "Thanks Sarah, I see it in the queue with Super Admin Olivia. We'll update you once treasury clears it tonight.",
-        sentAt: "2025-11-13T20:42:00Z",
-      },
-      {
-        id: "MSG-3",
-        author: "Sarah Johnson",
-        authorType: "host",
-        body: "Appreciate it! Please keep me posted.",
-        sentAt: "2025-11-13T21:30:00Z",
-      },
-    ],
-  },
-  {
-    id: "CONV-2895",
-    subject: "Viewer spam during live",
-    reporterName: "Amina Khan",
-    reporterType: "user",
-    reporterContact: "amina.khan@example.com",
-    status: "Waiting",
-    assignedTo: "Sub Admin Farah",
-    lastMessageAt: "2025-11-13T18:10:00Z",
-    messages: [
-      {
-        id: "MSG-4",
-        author: "Amina Khan",
-        authorType: "user",
-        body: "One of the viewers kept spamming hate speech in the live chat. Reporting the username 'ToxicWave'.",
-        sentAt: "2025-11-13T17:58:00Z",
-      },
-      {
-        id: "MSG-5",
-        author: "Agency Support",
-        authorType: "agency",
-        body: "Thank you, Amina. We're escalating this to Sub Admin Farah for moderation. We'll mute and investigate the account.",
-        sentAt: "2025-11-13T18:10:00Z",
-      },
-    ],
-  },
-  {
-    id: "CONV-2870",
-    subject: "Host onboarding documents",
-    reporterName: "Jason Lee",
-    reporterType: "host",
-    reporterContact: "+65 8123 9945",
-    status: "Resolved",
-    assignedTo: "Agency Ops Team",
-    lastMessageAt: "2025-11-12T14:25:00Z",
-    messages: [
-      {
-        id: "MSG-6",
-        author: "Jason Lee",
-        authorType: "host",
-        body: "I uploaded the updated passport yesterday. Let me know if anything else is pending for verification.",
-        sentAt: "2025-11-12T13:05:00Z",
-      },
-      {
-        id: "MSG-7",
-        author: "Agency Support",
-        authorType: "agency",
-        body: "All good now Jason. Verification is complete and you're clear for the weekend campaign.",
-        sentAt: "2025-11-12T14:25:00Z",
-      },
-    ],
-  },
-];
+// Seed data removed for Firestore integration
 
 const statusVariant: Record<ConversationStatus, "default" | "secondary" | "destructive"> = {
   Open: "default",
@@ -146,9 +62,24 @@ const canReply = (role: SupportRole) => true; // All roles (agency, company, sup
 
 export function SupportInbox({ role }: { role: SupportRole }) {
   const [search, setSearch] = useState("");
-  const [conversations, setConversations] = useState(seedConversations);
-  const [selectedId, setSelectedId] = useState<string>(seedConversations[0]?.id ?? "");
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [selectedId, setSelectedId] = useState<string>("");
   const [draft, setDraft] = useState("");
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const q = fbQuery(collection(db, "globiliveSupportConversations"), orderBy("lastMessageAt", "desc"));
+    const unsub = onSnapshot(q, (snap) => {
+        const list = snap.docs.map(d => ({
+            id: d.id,
+            ...d.data(),
+            lastMessageAt: (d.data() as any).lastMessageAt?.toDate?.()?.toISOString() || (d.data() as any).lastMessageAt
+        })) as Conversation[];
+        setConversations(list);
+        setLoading(false);
+    });
+    return () => unsub();
+  }, []);
 
   const filteredConversations = useMemo(() => {
     if (!search.trim()) {
@@ -178,55 +109,47 @@ export function SupportInbox({ role }: { role: SupportRole }) {
     setDraft("");
   };
 
-  const handleSend = () => {
+  const handleSend = async () => {
     if (!selectedConversation || !draft.trim()) {
       return;
     }
 
     const timestamp = new Date().toISOString();
+    const newMessage: Message = {
+      id: `MSG-${Math.random().toString(36).slice(2, 8)}`,
+      author: `${roleLabel[role]} Support`,
+      authorType: role as ParticipantType,
+      body: draft.trim(),
+      sentAt: timestamp,
+    };
 
-    setConversations((prev) =>
-      prev.map((conversation) => {
-        if (conversation.id !== selectedConversation.id) {
-          return conversation;
-        }
-        const newMessage: Message = {
-          id: `MSG-${Math.random().toString(36).slice(2, 8)}`,
-          author: `${roleLabel[role]} Support`,
-          authorType: role as ParticipantType,
-          body: draft.trim(),
-          sentAt: timestamp,
-        };
-
-        return {
-          ...conversation,
-          status: conversation.status === "Resolved" ? "Open" : conversation.status,
-          lastMessageAt: timestamp,
-          messages: [...conversation.messages, newMessage],
-        };
-      }),
-    );
-
-    setDraft("");
-    toast({ title: "Reply sent", description: "Your response is now visible to the host/user." });
+    try {
+        await updateDoc(doc(db, "globiliveSupportConversations", selectedConversation.id), {
+            status: selectedConversation.status === "Resolved" ? "Open" : selectedConversation.status,
+            lastMessageAt: serverTimestamp(),
+            messages: arrayUnion(newMessage)
+        });
+        setDraft("");
+        toast({ title: "Reply sent", description: "Response visible to the reporter." });
+    } catch (err) {
+        console.error("Send message failed", err);
+        toast({ title: "Error", description: "Failed to send response.", variant: "destructive" });
+    }
   };
 
-  const handleMarkResolved = () => {
+  const handleMarkResolved = async () => {
     if (!selectedConversation) {
       return;
     }
 
-    setConversations((prev) =>
-      prev.map((conversation) =>
-        conversation.id === selectedConversation.id
-          ? {
-              ...conversation,
-              status: "Resolved",
-            }
-          : conversation,
-      ),
-    );
-    toast({ title: "Conversation resolved", description: "Marked as resolved for reporting." });
+    try {
+        await updateDoc(doc(db, "globiliveSupportConversations", selectedConversation.id), {
+            status: "Resolved"
+        });
+        toast({ title: "Conversation resolved", description: "Marked as resolved for reporting." });
+    } catch (err) {
+        console.error("Resolve failed", err);
+    }
   };
 
   const description = roleDescription[role];

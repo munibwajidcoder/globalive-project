@@ -41,31 +41,49 @@ export default function CompanyBeans() {
     const settingsRef = doc(db, "globilivePlatformSettings", "beanSettings");
     
     // Listen for current settings
-    const unsubSettings = onSnapshot(settingsRef, (docSnap) => {
-      if (docSnap.exists()) {
-        const data = docSnap.data();
-        setDollarRate(data.dollarRate || 10);
-        setBeansPerRate(data.beansPerRate || 100000);
-        setCommission(data.commission || 80);
-        setDiamondToBeanRate(data.diamondToBeanRate || 100);
-      }
-    });
+    const unsubSettings = onSnapshot(settingsRef, 
+      (docSnap) => {
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          setDollarRate(data.dollarRate || 10);
+          setBeansPerRate(data.beansPerRate || 100000);
+          setCommission(data.commission || 80);
+          setDiamondToBeanRate(data.diamondToBeanRate || 100);
+        }
+      },
+      (err) => console.error("Beans: Settings error", err)
+    );
 
     // Histories
     const qRate = query(collection(db, "globiliveBeanRateHistory"), orderBy("createdAt", "desc"));
-    const unsubRate = onSnapshot(qRate, (snap) => setRateHistory(snap.docs.map(d => ({ id: d.id, ...d.data(), date: d.data().createdAt?.toDate?.()?.toISOString() }))));
+    const unsubRate = onSnapshot(qRate, 
+      (snap) => setRateHistory(snap.docs.map(d => ({ id: d.id, ...d.data(), date: d.data().createdAt?.toDate?.()?.toISOString() }))),
+      (err) => console.error("Beans: Rate history error", err)
+    );
 
     const qAssign = query(collection(db, "globiliveBeanAssignmentHistory"), orderBy("createdAt", "desc"));
-    const unsubAssign = onSnapshot(qAssign, (snap) => setAssignmentHistory(snap.docs.map(d => ({ id: d.id, ...d.data(), date: d.data().createdAt?.toDate?.()?.toISOString() }))));
+    const unsubAssign = onSnapshot(qAssign, 
+      (snap) => setAssignmentHistory(snap.docs.map(d => ({ id: d.id, ...d.data(), date: d.data().createdAt?.toDate?.()?.toISOString() }))),
+      (err) => console.error("Beans: Assignment history error", err)
+    );
 
     const qComm = query(collection(db, "globiliveDiamondCommissionHistory"), orderBy("createdAt", "desc"));
-    const unsubComm = onSnapshot(qComm, (snap) => setCommissionHistory(snap.docs.map(d => ({ id: d.id, ...d.data(), date: d.data().createdAt?.toDate?.()?.toISOString() }))));
+    const unsubComm = onSnapshot(qComm, 
+      (snap) => setCommissionHistory(snap.docs.map(d => ({ id: d.id, ...d.data(), date: d.data().createdAt?.toDate?.()?.toISOString() }))),
+      (err) => console.error("Beans: Commission history error", err)
+    );
 
     const qDiaRate = query(collection(db, "globiliveDiamondToBeanRateHistory"), orderBy("createdAt", "desc"));
-    const unsubDiaRate = onSnapshot(qDiaRate, (snap) => setDiamondToBeanRateHistory(snap.docs.map(d => ({ id: d.id, ...d.data(), date: d.data().createdAt?.toDate?.()?.toISOString() }))));
+    const unsubDiaRate = onSnapshot(qDiaRate, 
+      (snap) => setDiamondToBeanRateHistory(snap.docs.map(d => ({ id: d.id, ...d.data(), date: d.data().createdAt?.toDate?.()?.toISOString() }))),
+      (err) => console.error("Beans: Diamond-to-bean rate error", err)
+    );
 
     const qConv = query(collection(db, "globiliveDollarConversionHistory"), orderBy("createdAt", "desc"));
-    const unsubConv = onSnapshot(qConv, (snap) => setDollarConversionRatesHistory(snap.docs.map(d => ({ id: d.id, ...d.data(), date: d.data().createdAt?.toDate?.()?.toISOString() }))));
+    const unsubConv = onSnapshot(qConv, 
+      (snap) => setDollarConversionRatesHistory(snap.docs.map(d => ({ id: d.id, ...d.data(), date: d.data().createdAt?.toDate?.()?.toISOString() }))),
+      (err) => console.error("Beans: Conversion rate error", err)
+    );
 
     return () => {
       unsubSettings(); unsubRate(); unsubAssign(); unsubComm(); unsubDiaRate(); unsubConv();
@@ -93,26 +111,32 @@ export default function CompanyBeans() {
 
   useEffect(() => {
     const q = query(collection(db, "globilivePlatformLedger"), orderBy("createdAt", "desc"));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      let balance = 0;
-      const history: any[] = [];
-      snapshot.forEach((doc) => {
-        const data = doc.data();
-        if (data.type === "generated") {
-          balance += data.amount || 0;
-          history.push({
-            id: doc.id,
-            amount: data.amount,
-            date: data.createdAt?.toDate?.()?.toISOString() || new Date().toISOString()
-          });
-        }
-        if (data.type === "assigned") {
-          balance -= data.amount || 0;
-        }
-      });
-      setBeanBalance(balance);
-      setGenerationHistory(history);
-    });
+    const unsubscribe = onSnapshot(q, 
+      (snapshot) => {
+        let balance = 0;
+        const history: any[] = [];
+        snapshot.forEach((doc) => {
+          const data = doc.data();
+          if (data.type === "generated") {
+            balance += data.amount || 0;
+            history.push({
+              id: doc.id,
+              amount: data.amount,
+              date: data.createdAt?.toDate?.()?.toISOString() || new Date().toISOString()
+            });
+          }
+          if (data.type === "assigned") {
+            balance -= data.amount || 0;
+          }
+        });
+        setBeanBalance(balance);
+        setGenerationHistory(history);
+      },
+      (err) => {
+        console.error("Beans: Ledger error", err);
+        setBeanBalance(0);
+      }
+    );
     return () => unsubscribe();
   }, []);
 
@@ -143,10 +167,13 @@ export default function CompanyBeans() {
   const [recipients, setRecipients] = useState<any[]>([]);
 
   useEffect(() => {
-    const unsub = onSnapshot(collection(db, "globiliveAgencies"), (snap) => {
-      const list = snap.docs.map(d => ({ id: d.id, name: d.data().agencyName || d.data().name, role: "Agency" }));
-      setRecipients(list);
-    });
+    const unsub = onSnapshot(collection(db, "globiliveAgencies"), 
+      (snap) => {
+        const list = snap.docs.map(d => ({ id: d.id, name: d.data().agencyName || d.data().name, role: "Agency" }));
+        setRecipients(list);
+      },
+      (err) => console.error("Beans: Agencies recipient list error", err)
+    );
     return () => unsub();
   }, []);
 

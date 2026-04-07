@@ -1,4 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useAuth } from "@/contexts/AuthContext";
+import { db } from "@/lib/firebase";
+import { collection, onSnapshot, query as fbQuery, where, orderBy, addDoc, serverTimestamp, limit } from "firebase/firestore";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { MetricCard } from "@/components/MetricCard";
 import { Badge } from "@/components/ui/badge";
@@ -71,51 +74,16 @@ const statusBadgeVariant: Record<RequestStatus, "default" | "secondary" | "outli
   "Pending Company Approval": "outline",
 };
 
-const initialRequests: BeanRequestRecord[] = [
-  {
-    id: "REQ-3206",
-    requestDate: "2025-11-14T04:45:00Z",
-    beansRequested: 80000,
-    walletSnapshot: 52000,
-    paymentSent: 1680,
-    beansReceived: 0,
-    status: "Awaiting Payment Verification",
-    slipName: "TransferSlip_3206.pdf",
-    slipUrl: "https://assets.globilive.example/slips/TransferSlip_3206.pdf",
-    notes: "Payment sent via instant transfer. Waiting for confirmation.",
-  },
-  {
-    id: "REQ-3205",
-    requestDate: "2025-11-13T10:15:00Z",
-    beansRequested: 60000,
-    walletSnapshot: 42000,
-    paymentSent: 1260,
-    beansReceived: 60000,
-    receivedDate: "2025-11-13T13:40:00Z",
-    status: "Completed",
-    slipName: "TransferSlip_3205.pdf",
-    slipUrl: "https://assets.globilive.example/slips/TransferSlip_3205.pdf",
-    notes: "Weekend campaign top-up approved by Company Admin Fatima.",
-  },
-  {
-    id: "REQ-3204",
-    requestDate: "2025-11-11T15:05:00Z",
-    beansRequested: 45000,
-    walletSnapshot: 38000,
-    paymentSent: 945,
-    beansReceived: 45000,
-    receivedDate: "2025-11-11T18:22:00Z",
-    status: "Completed",
-    slipName: "TransferSlip_3204.pdf",
-    slipUrl: "https://assets.globilive.example/slips/TransferSlip_3204.pdf",
-    notes: "Routine weekly replenishment.",
-  },
-];
+// Removed initialRequests constants to use Firestore data
 
 const generateRequestId = () => `REQ-${Math.floor(1000 + Math.random() * 9000)}`;
 
 export default function TopUpAgentDashboard() {
-  const [requests, setRequests] = useState<BeanRequestRecord[]>(initialRequests);
+  const { user } = useAuth();
+  const [requests, setRequests] = useState<BeanRequestRecord[]>([]);
+  const [agentProfile, setAgentProfile] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  
   const [beansInput, setBeansInput] = useState("");
   const [paymentInput, setPaymentInput] = useState("");
   const [notesInput, setNotesInput] = useState("");
@@ -125,11 +93,45 @@ export default function TopUpAgentDashboard() {
   const createdSlipUrls = useRef<string[]>([]);
 
   useEffect(() => {
+    if (!user?.username) return;
+
+    // Fetch Agent Profile
+    const profileQuery = fbQuery(collection(db, "globiliveTopUpAgents"), where("email", "==", user.username), limit(1));
+    const unsubProfile = onSnapshot(profileQuery, (snapshot) => {
+      if (!snapshot.empty) {
+        setAgentProfile(snapshot.docs[0].data());
+      }
+    });
+
+    // Fetch Requests
+    const q = fbQuery(
+        collection(db, "globiliveBeanRequests"), 
+        where("agentEmail", "==", user.username),
+        orderBy("requestDate", "desc")
+    );
+    const unsubRequests = onSnapshot(q, (snapshot) => {
+      const list = snapshot.docs.map(d => ({
+        id: d.id,
+        ...d.data(),
+        requestDate: (d.data() as any).requestDate?.toDate?.()?.toISOString() || (d.data() as any).requestDate,
+        receivedDate: (d.data() as any).receivedDate?.toDate?.()?.toISOString() || (d.data() as any).receivedDate,
+      })) as BeanRequestRecord[];
+      setRequests(list);
+      setLoading(false);
+    }, (error) => {
+      console.error("Error fetching bean requests:", error);
+      setLoading(false);
+    });
+
     return () => {
+      unsubProfile();
+      unsubRequests();
       createdSlipUrls.current.forEach((url) => URL.revokeObjectURL(url));
       createdSlipUrls.current = [];
     };
-  }, []);
+  }, [user]);
+
+  const currentWalletBeans = agentProfile?.beans || 0;
 
   const totals = useMemo(() => {
     const totalBeansRequested = requests.reduce((sum, record) => sum + record.beansRequested, 0);
@@ -138,23 +140,6 @@ export default function TopUpAgentDashboard() {
     const totalCommission = requests.reduce((sum, record) => sum + record.paymentSent * COMMISSION_RATE, 0);
     const completed = requests.filter((record) => record.status === "Completed").length;
     return { totalBeansRequested, totalBeansReceived, totalPayments, totalCommission, completed };
-  }, [requests]);
-
-  const currentWalletBeans = useMemo(() => {
-    const completedRequests = requests
-      .filter((record) => record.status === "Completed")
-      .sort((a, b) => new Date(b.requestDate).getTime() - new Date(a.requestDate).getTime());
-
-    if (completedRequests.length > 0) {
-      const latest = completedRequests[0];
-      return latest.walletSnapshot + latest.beansReceived;
-    }
-
-    if (requests.length > 0) {
-      return requests[0].walletSnapshot;
-    }
-
-    return 0;
   }, [requests]);
 
   const pendingCount = useMemo(
@@ -177,44 +162,46 @@ export default function TopUpAgentDashboard() {
     }
   };
 
-  const submitRequest = () => {
-    const beansValue = Number.parseInt(beansInput, 10);
-    const paymentValue = Number.parseFloat(paymentInput);
+  const submitRequest = async () => {
+    const beansValue = parseInt(beansInput, 10);
+    const paymentValue = parseFloat(paymentInput);
 
-    if (!Number.isFinite(beansValue) || Number.isNaN(beansValue) || beansValue <= 0) {
-      toast({ title: "Invalid beans quantity", description: "Enter how many beans you need from company admin." });
+    if (!isFinite(beansValue) || isNaN(beansValue) || beansValue <= 0) {
+      toast({ title: "Invalid beans quantity", description: "Enter how many beans you need." });
       return;
     }
 
-    if (!Number.isFinite(paymentValue) || Number.isNaN(paymentValue) || paymentValue <= 0) {
-      toast({ title: "Missing payment", description: "Enter the payment transferred to the company admin." });
+    if (!isFinite(paymentValue) || isNaN(paymentValue) || paymentValue <= 0) {
+      toast({ title: "Missing payment", description: "Enter the payment transferred." });
       return;
     }
 
     if (!slipFile) {
-      toast({ title: "Transfer slip required", description: "Attach the bank or wallet slip for this payment." });
+      toast({ title: "Transfer slip required", description: "Attach the proof." });
       return;
     }
 
-    const slipUrl = URL.createObjectURL(slipFile);
-    createdSlipUrls.current.push(slipUrl);
+    try {
+        await addDoc(collection(db, "globiliveBeanRequests"), {
+            agentEmail: user?.username,
+            agentName: agentProfile?.name || user?.username,
+            requestDate: serverTimestamp(),
+            beansRequested: beansValue,
+            walletSnapshot: currentWalletBeans,
+            paymentSent: paymentValue,
+            beansReceived: 0,
+            status: "Awaiting Payment Verification",
+            slipName: slipFile.name,
+            notes: notesInput.trim() || "",
+            createdAt: serverTimestamp()
+        });
 
-    const newRecord: BeanRequestRecord = {
-      id: generateRequestId(),
-      requestDate: new Date().toISOString(),
-      beansRequested: beansValue,
-      walletSnapshot: currentWalletBeans,
-      paymentSent: paymentValue,
-      beansReceived: 0,
-      status: "Pending Company Approval",
-      slipName: slipFile.name,
-      slipUrl,
-      notes: notesInput.trim() || undefined,
-    };
-
-    setRequests((prev) => [newRecord, ...prev]);
-    toast({ title: "Request submitted", description: "Company admin has been alerted with your payment slip." });
-    resetForm();
+        toast({ title: "Request submitted", description: "Company admin has been alerted." });
+        resetForm();
+    } catch (err) {
+        console.error("Submit request failed", err);
+        toast({ title: "Error", description: "Failed to submit request.", variant: "destructive" });
+    }
   };
 
   const handleViewSlip = (record: BeanRequestRecord) => {

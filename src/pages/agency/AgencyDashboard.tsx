@@ -1,6 +1,6 @@
 import { useMemo, useState, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { collection, getDocs, query as fbQuery, where, getDoc, doc } from "firebase/firestore";
+import { collection, getDocs, query as fbQuery, where, getDoc, doc, onSnapshot, orderBy } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { MetricCard } from "@/components/MetricCard";
@@ -69,11 +69,7 @@ type ShareWithdrawalRequest = {
 const DIAMOND_TO_PKR = 1.8;
 const HOST_FORM_BASE = "https://globilive.app/public/host-apply";
 
-const shareWithdrawalsSeed: ShareWithdrawalRequest[] = [
-  { id: "SW-2098", routedTo: "Super Admin", amountPkr: 185000, requestedOn: "2025-11-08", processedOn: "2025-11-09", status: "Paid" },
-  { id: "SW-2110", routedTo: "Sub Admin", amountPkr: 92000, requestedOn: "2025-11-12", status: "Pending", note: "Awaiting treasury clearance" },
-  { id: "SW-2050", routedTo: "Super Admin", amountPkr: 156000, requestedOn: "2025-10-25", processedOn: "2025-10-27", status: "Paid" },
-];
+// Seed data removed for Firestore integration
 
 const formatPkr = (value: number) =>
   new Intl.NumberFormat("en-PK", { style: "currency", currency: "PKR", maximumFractionDigits: 0 }).format(value);
@@ -93,6 +89,27 @@ export default function AgencyDashboard() {
   const { user, logout } = useAuth();
   const [agencyName, setAgencyName] = useState<string | null>(null);
   const [agencyCode, setAgencyCode] = useState<string | null>(null);
+  const [shareWithdrawals, setShareWithdrawals] = useState<ShareWithdrawalRequest[]>([]);
+
+  useEffect(() => {
+    if (!user?.username) return;
+
+    // Fetch share withdrawals for this agency
+    const qPayouts = fbQuery(
+      collection(db, "globiliveAgencyPayouts"),
+      where("agencyEmail", "==", user.username),
+      orderBy("requestedOn", "desc")
+    );
+
+    const unsubPayouts = onSnapshot(qPayouts, (snap) => {
+      setShareWithdrawals(snap.docs.map(d => ({
+        id: d.id,
+        ...d.data()
+      })) as any);
+    });
+
+    return () => unsubPayouts();
+  }, [user]);
 
   useEffect(() => {
     let mounted = true;
@@ -382,14 +399,14 @@ export default function AgencyDashboard() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {shareWithdrawalsSeed.length === 0 ? (
+                      {shareWithdrawals.length === 0 ? (
                         <TableRow>
                           <TableCell colSpan={3} className="text-center text-muted-foreground py-8 text-xs italic">
                             No requests submitted yet.
                           </TableCell>
                         </TableRow>
                       ) : (
-                        shareWithdrawalsSeed.map((request) => (
+                        shareWithdrawals.map((request) => (
                           <TableRow key={request.id} className="border-border/40 hover:bg-muted/20 transition-colors">
                             <TableCell className="font-bold text-[10px] font-mono py-3">{request.id}</TableCell>
                             <TableCell className="text-center text-xs font-bold text-success">{formatPkr(request.amountPkr)}</TableCell>

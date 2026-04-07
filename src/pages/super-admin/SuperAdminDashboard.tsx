@@ -1,9 +1,9 @@
+import { collection, query as fbQuery, where, getDocs, getDoc, doc, onSnapshot, orderBy } from "firebase/firestore";
+import { db } from "@/lib/firebase";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { MetricCard } from "@/components/MetricCard";
 import { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { db } from "@/lib/firebase";
-import { collection, query as fbQuery, where, getDocs, getDoc, doc } from "firebase/firestore";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -13,6 +13,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import EnhancedTable from "@/components/ui/EnhancedTable";
 import { TableRow, TableCell, TableHead, TableHeader, Table, TableBody } from "@/components/ui/table";
 import { Link, useNavigate } from "react-router-dom";
+import { toast } from "@/components/ui/use-toast";
 import type { LucideIcon } from "lucide-react";
 import {
   AlertTriangle,
@@ -23,9 +24,15 @@ import {
   UserCog,
   Users,
   User,
+  Plus,
+  Search,
+  Check,
+  Eye,
+  MoreHorizontal,
   Database,
   Banknote,
-  Percent
+  Percent,
+  Link as LinkIcon,
 } from "lucide-react";
 
 type AdminDashboardRole = "super-admin" | "sub-admin";
@@ -106,7 +113,44 @@ export function AdminDashboardHome({ role = "super-admin" }: { role?: AdminDashb
   const [managedHostCount, setManagedHostCount] = useState<number | null>(null);
   const [displayName, setDisplayName] = useState<string | null>(null);
   const [displayEmail, setDisplayEmail] = useState<string | null>(null);
+  
+  const [realAgencies, setRealAgencies] = useState<any[]>([]);
+  const [realSubAdmins, setRealSubAdmins] = useState<any[]>([]);
+  const [realResellers, setRealResellers] = useState<any[]>([]);
+  const [realCashouts, setRealCashouts] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
   const navigate = useNavigate();
+
+  useEffect(() => {
+    // Real-time listeners for dashboard lists
+    const qAgencies = fbQuery(collection(db, "globiliveAgencies"), orderBy("createdAt", "desc"));
+    const unsubAgencies = onSnapshot(qAgencies, (snap) => {
+        setRealAgencies(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    });
+
+    const qSubAdmins = fbQuery(collection(db, "globiliveSubAdmins"), orderBy("createdAt", "desc"));
+    const unsubSubAdmins = onSnapshot(qSubAdmins, (snap) => {
+        setRealSubAdmins(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    });
+
+    const qResellers = fbQuery(collection(db, "globiliveResellers"), orderBy("createdAt", "desc"));
+    const unsubResellers = onSnapshot(qResellers, (snap) => {
+        setRealResellers(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    });
+
+    const qCashouts = fbQuery(collection(db, "globiliveCashouts"), orderBy("requestDate", "desc"));
+    const unsubCashouts = onSnapshot(qCashouts, (snap) => {
+        setRealCashouts(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    });
+
+    return () => {
+        unsubAgencies();
+        unsubSubAdmins();
+        unsubResellers();
+        unsubCashouts();
+    };
+  }, []);
 
   useEffect(() => {
     let mounted = true;
@@ -329,9 +373,9 @@ export function AdminDashboardHome({ role = "super-admin" }: { role?: AdminDashb
                         </CardHeader>
                         <CardContent className="p-0 sm:p-6 sm:pt-0">
                             <EnhancedTable
-                                data={cashoutQueue}
+                                data={realCashouts}
                                 pageSize={5}
-                                searchKeys={["host", "status"]}
+                                searchKeys={["hostName", "status"]}
                                 columns={
                                     <TableHeader>
                                         <TableRow className="border-border/40 hover:bg-transparent">
@@ -346,12 +390,12 @@ export function AdminDashboardHome({ role = "super-admin" }: { role?: AdminDashb
                                 }
                                 renderRow={(w: any) => (
                                     <TableRow key={w.id} className="border-border/40">
-                                        <TableCell className="font-medium pl-4">{w.host}</TableCell>
-                                        <TableCell className="font-bold text-cyan-500">{w.diamonds.toLocaleString()}</TableCell>
-                                        <TableCell className="text-center font-bold text-destructive">{w.requested.toLocaleString()}</TableCell>
-                                        <TableCell className="font-bold">{w.amountRs}</TableCell>
+                                        <TableCell className="font-medium pl-4">{w.hostName}</TableCell>
+                                        <TableCell className="font-bold text-cyan-500">{(w.totalDiamonds || 0).toLocaleString()}</TableCell>
+                                        <TableCell className="text-center font-bold text-destructive">{(w.amount || 0).toLocaleString()}</TableCell>
+                                        <TableCell className="font-bold">₨ {((w.amount || 0) * 1.8).toLocaleString()}</TableCell>
                                         <TableCell>
-                                            <Badge variant={w.status === "Approved" ? "default" : "secondary"}>{w.status}</Badge>
+                                            <Badge variant={w.status === "Approved" ? "default" : "secondary"}>{w.status || "Pending"}</Badge>
                                         </TableCell>
                                         <TableCell className="text-right pr-4">
                                             <Button size="sm" variant="secondary" onClick={() => navigate(`/${role}/cashout`)}>Review</Button>
@@ -370,7 +414,7 @@ export function AdminDashboardHome({ role = "super-admin" }: { role?: AdminDashb
                         </CardHeader>
                         <CardContent className="p-0 sm:p-6 sm:pt-0">
                             <EnhancedTable
-                                data={mockAgencies}
+                                data={realAgencies}
                                 pageSize={5}
                                 searchKeys={["name"]}
                                 columns={
@@ -378,8 +422,8 @@ export function AdminDashboardHome({ role = "super-admin" }: { role?: AdminDashb
                                         <TableRow className="border-border/40 hover:bg-transparent">
                                             <TableHead className="text-[10px] font-black uppercase tracking-widest pl-4">Agency</TableHead>
                                             <TableHead className="text-[10px] font-black uppercase tracking-widest text-center">Hosts</TableHead>
-                                            <TableHead className="text-[10px] font-black uppercase tracking-widest">Sub Admin Sup.</TableHead>
-                                            <TableHead className="text-[10px] font-black uppercase tracking-widest">Share</TableHead>
+                                            <TableHead className="text-[10px] font-black uppercase tracking-widest">Code</TableHead>
+                                            <TableHead className="text-[10px] font-black uppercase tracking-widest">Email</TableHead>
                                             <TableHead className="text-[10px] font-black uppercase tracking-widest">Beans/Diamonds</TableHead>
                                             <TableHead className="text-right text-[10px] font-black uppercase tracking-widest pr-4">Manage</TableHead>
                                         </TableRow>
@@ -387,14 +431,14 @@ export function AdminDashboardHome({ role = "super-admin" }: { role?: AdminDashb
                                 }
                                 renderRow={(a: any) => (
                                     <TableRow key={a.id} className="border-border/40">
-                                        <TableCell className="font-medium pl-4">{a.name}</TableCell>
-                                        <TableCell className="text-center font-bold">{a.hosts}</TableCell>
-                                        <TableCell>{a.subAdmins}</TableCell>
-                                        <TableCell><Badge variant="outline" className="border-green-500 text-green-500">{a.share}</Badge></TableCell>
+                                        <TableCell className="font-medium pl-4">{a.name || a.agencyName || a.id}</TableCell>
+                                        <TableCell className="text-center font-bold">{(a.agencyHosts || []).length}</TableCell>
+                                        <TableCell><Badge variant="outline">{a.code || a.agencyCode || "—"}</Badge></TableCell>
+                                        <TableCell className="text-xs">{a.contactEmail || "—"}</TableCell>
                                         <TableCell>
                                             <div className="flex flex-col text-xs font-bold leading-tight">
-                                                <span className="text-primary">{a.beans?.toLocaleString()} B</span>
-                                                <span className="text-cyan-500">{a.diamonds?.toLocaleString()} D</span>
+                                                <span className="text-primary">{(a.beans || 0).toLocaleString()} B</span>
+                                                <span className="text-cyan-500">{(a.diamonds || 0).toLocaleString()} D</span>
                                             </div>
                                         </TableCell>
                                         <TableCell className="text-right pr-4">
@@ -415,17 +459,17 @@ export function AdminDashboardHome({ role = "super-admin" }: { role?: AdminDashb
                             </CardHeader>
                             <CardContent className="p-0 sm:p-6 sm:pt-0">
                                 <EnhancedTable
-                                    data={mockSubAdmins}
+                                    data={realSubAdmins}
                                     pageSize={5}
-                                    searchKeys={["name"]}
+                                    searchKeys={["name", "email"]}
                                     columns={
                                         <TableHeader>
                                             <TableRow className="border-border/40 hover:bg-transparent">
                                                 <TableHead className="text-[10px] font-black uppercase tracking-widest pl-4">Name & Email</TableHead>
-                                                <TableHead className="text-[10px] font-black uppercase tracking-widest">ID</TableHead>
-                                                <TableHead className="text-[10px] font-black uppercase tracking-widest text-center">Hosts</TableHead>
-                                                <TableHead className="text-[10px] font-black uppercase tracking-widest">Contact</TableHead>
-                                                <TableHead className="text-[10px] font-black uppercase tracking-widest">Share / Beans</TableHead>
+                                                <TableHead className="text-[10px] font-black uppercase tracking-widest">Region</TableHead>
+                                                <TableHead className="text-[10px] font-black uppercase tracking-widest text-center">Agencies</TableHead>
+                                                <TableHead className="text-[10px] font-black uppercase tracking-widest">Share</TableHead>
+                                                <TableHead className="text-[10px] font-black uppercase tracking-widest">Status</TableHead>
                                                 <TableHead className="text-right text-[10px] font-black uppercase tracking-widest pr-4">Manage</TableHead>
                                             </TableRow>
                                         </TableHeader>
@@ -434,18 +478,15 @@ export function AdminDashboardHome({ role = "super-admin" }: { role?: AdminDashb
                                         <TableRow key={s.id} className="border-border/40">
                                             <TableCell className="font-medium pl-4">
                                                 <div className="flex flex-col">
-                                                    <span>{s.name}</span>
+                                                    <span>{s.name || s.id}</span>
                                                     <span className="text-[10px] text-muted-foreground">{s.email}</span>
                                                 </div>
                                             </TableCell>
-                                            <TableCell className="text-xs font-mono">{s.id}</TableCell>
-                                            <TableCell className="text-center font-bold text-purple-600">{s.hosts}</TableCell>
-                                            <TableCell className="text-sm">{s.contact}</TableCell>
+                                            <TableCell className="text-xs">{s.region || "—"}</TableCell>
+                                            <TableCell className="text-center font-bold text-purple-600">{(s.assignedAgenciesIds || []).length}</TableCell>
+                                            <TableCell className="font-bold text-green-500">{s.share || 0}%</TableCell>
                                             <TableCell>
-                                                <div className="flex flex-col text-xs font-bold leading-tight">
-                                                    <span className="text-green-500">{s.share} Share</span>
-                                                    <span className="text-primary">{s.beans?.toLocaleString()} B</span>
-                                                </div>
+                                                <Badge variant={s.status === "Active" ? "default" : "destructive"}>{s.status || "Active"}</Badge>
                                             </TableCell>
                                             <TableCell className="text-right pr-4">
                                                 <Button size="sm" variant="secondary" onClick={() => navigate('/super-admin/sub-admins')}>View</Button>
@@ -466,15 +507,15 @@ export function AdminDashboardHome({ role = "super-admin" }: { role?: AdminDashb
                             </CardHeader>
                             <CardContent className="p-0 sm:p-6 sm:pt-0">
                                 <EnhancedTable
-                                    data={mockResellers}
+                                    data={realResellers}
                                     pageSize={5}
-                                    searchKeys={["name"]}
+                                    searchKeys={["name", "email"]}
                                     columns={
                                         <TableHeader>
                                             <TableRow className="border-border/40 hover:bg-transparent">
                                                 <TableHead className="text-[10px] font-black uppercase tracking-widest pl-4">Network Name</TableHead>
-                                                <TableHead className="text-[10px] font-black uppercase tracking-widest">Purchasing Requests</TableHead>
-                                                <TableHead className="text-[10px] font-black uppercase tracking-widest">Share</TableHead>
+                                                <TableHead className="text-[10px] font-black uppercase tracking-widest">Status</TableHead>
+                                                <TableHead className="text-[10px] font-black uppercase tracking-widest">Email</TableHead>
                                                 <TableHead className="text-[10px] font-black uppercase tracking-widest">Total Beans / Diamonds</TableHead>
                                                 <TableHead className="text-right text-[10px] font-black uppercase tracking-widest pr-4">Manage</TableHead>
                                             </TableRow>
@@ -482,13 +523,13 @@ export function AdminDashboardHome({ role = "super-admin" }: { role?: AdminDashb
                                     }
                                     renderRow={(r: any) => (
                                         <TableRow key={r.id} className="border-border/40">
-                                            <TableCell className="font-medium pl-4">{r.name}</TableCell>
-                                            <TableCell className="font-bold">{r.purchaseRequests}</TableCell>
-                                            <TableCell><Badge className="bg-cyan-500/10 text-cyan-500 border-none">{r.share}</Badge></TableCell>
+                                            <TableCell className="font-medium pl-4">{r.name || r.id}</TableCell>
+                                            <TableCell><Badge className="bg-cyan-500/10 text-cyan-500 border-none">{r.status || "Active"}</Badge></TableCell>
+                                            <TableCell className="text-xs font-mono">{r.email || r.contactEmail || "—"}</TableCell>
                                             <TableCell>
                                                 <div className="flex flex-col text-xs font-bold leading-tight">
-                                                    <span className="text-primary">{r.totalBeans?.toLocaleString()} B</span>
-                                                    <span className="text-cyan-500">{r.diamonds?.toLocaleString()} D</span>
+                                                    <span className="text-primary">{(r.beans || 0).toLocaleString()} B</span>
+                                                    <span className="text-cyan-500">{(r.diamonds || 0).toLocaleString()} D</span>
                                                 </div>
                                             </TableCell>
                                             <TableCell className="text-right pr-4">

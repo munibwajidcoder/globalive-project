@@ -1,4 +1,6 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { collection, onSnapshot, query as fbQuery, orderBy } from "firebase/firestore";
+import { db } from "@/lib/firebase";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { MetricCard } from "@/components/MetricCard";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -38,218 +40,7 @@ type DiamondRecord = {
   note?: string;
 };
 
-const DIAMOND_RECORDS: DiamondRecord[] = [
-  {
-    id: "DR-2025-1101-001",
-    date: "2025-11-01T09:25:00Z",
-    hostId: "H001",
-    host: "Alice Carter",
-    agencyId: "A001",
-    agency: "Golden Stars",
-    subAdminId: "SA001",
-    subAdmin: "Alex Hartman",
-    type: "received",
-    amount: 1850,
-    fromName: "Daniel Ruiz",
-    fromRole: "user",
-    note: "Live session gifts",
-  },
-  {
-    id: "DR-2025-1102-004",
-    date: "2025-11-02T15:40:00Z",
-    hostId: "H002",
-    host: "Michael Chen",
-    agencyId: "A002",
-    agency: "Elite Performers",
-    subAdminId: "SA002",
-    subAdmin: "Maria Garcia",
-    type: "received",
-    amount: 1120,
-    fromName: "BeanStock Resellers",
-    fromRole: "reseller",
-    note: "Beans conversion",
-  },
-  {
-    id: "DR-2025-1103-002",
-    date: "2025-11-03T12:15:00Z",
-    hostId: "H001",
-    host: "Alice Carter",
-    agencyId: "A001",
-    agency: "Golden Stars",
-    subAdminId: "SA001",
-    subAdmin: "Alex Hartman",
-    type: "withdrawn",
-    amount: 700,
-    fromName: "GlobiLive Treasury",
-    fromRole: "company",
-    note: "Weekly payout",
-  },
-  {
-    id: "DR-2025-1104-003",
-    date: "2025-11-04T20:05:00Z",
-    hostId: "H003",
-    host: "Priya Singh",
-    agencyId: "A003",
-    agency: "Starlight Collective",
-    subAdminId: "SA003",
-    subAdmin: "Jordan Lee",
-    type: "received",
-    amount: 980,
-    fromName: "Golden Stars Agency",
-    fromRole: "agency",
-    note: "Guest collaboration bonus",
-  },
-  {
-    id: "DR-2025-1105-007",
-    date: "2025-11-05T10:30:00Z",
-    hostId: "H002",
-    host: "Michael Chen",
-    agencyId: "A002",
-    agency: "Elite Performers",
-    subAdminId: "SA002",
-    subAdmin: "Maria Garcia",
-    type: "received",
-    amount: 1340,
-    fromName: "TopUp Kings",
-    fromRole: "reseller",
-    note: "Top-up campaign",
-  },
-  {
-    id: "DR-2025-1106-005",
-    date: "2025-11-06T08:45:00Z",
-    hostId: "H003",
-    host: "Priya Singh",
-    agencyId: "A003",
-    agency: "Starlight Collective",
-    subAdminId: "SA003",
-    subAdmin: "Jordan Lee",
-    type: "withdrawn",
-    amount: 450,
-    fromName: "GlobiLive Treasury",
-    fromRole: "company",
-    note: "Express withdrawal",
-  },
-  {
-    id: "DR-2025-1106-008",
-    date: "2025-11-06T22:10:00Z",
-    hostId: "H004",
-    host: "Noah Smith",
-    agencyId: "A002",
-    agency: "Elite Performers",
-    subAdminId: "SA002",
-    subAdmin: "Maria Garcia",
-    type: "received",
-    amount: 760,
-    fromName: "Mia Patel",
-    fromRole: "user",
-    note: "Premium gifting",
-  },
-  {
-    id: "DR-2025-1107-006",
-    date: "2025-11-07T11:20:00Z",
-    hostId: "H005",
-    host: "Elena Rossi",
-    agencyId: "A001",
-    agency: "Golden Stars",
-    subAdminId: "SA001",
-    subAdmin: "Alex Hartman",
-    type: "received",
-    amount: 2150,
-    fromName: "Sub Admin Bonus Pool",
-    fromRole: "sub-admin",
-    note: "Tier incentive",
-  },
-  {
-    id: "DR-2025-1108-001",
-    date: "2025-11-08T09:00:00Z",
-    hostId: "H002",
-    host: "Michael Chen",
-    agencyId: "A002",
-    agency: "Elite Performers",
-    subAdminId: "SA002",
-    subAdmin: "Maria Garcia",
-    type: "withdrawn",
-    amount: 500,
-    fromName: "GlobiLive Treasury",
-    fromRole: "company",
-    note: "Milestone payout",
-  },
-  {
-    id: "DR-2025-1109-002",
-    date: "2025-11-09T18:25:00Z",
-    hostId: "H001",
-    host: "Alice Carter",
-    agencyId: "A001",
-    agency: "Golden Stars",
-    subAdminId: "SA001",
-    subAdmin: "Alex Hartman",
-    type: "received",
-    amount: 1425,
-    fromName: "TopUp Kings",
-    fromRole: "reseller",
-    note: "Weekend promo",
-  },
-  {
-    id: "DR-2025-1110-004",
-    date: "2025-11-10T13:50:00Z",
-    hostId: "H003",
-    host: "Priya Singh",
-    agencyId: "A003",
-    agency: "Starlight Collective",
-    subAdminId: "SA003",
-    subAdmin: "Jordan Lee",
-    type: "received",
-    amount: 1030,
-    fromName: "Liam Parker",
-    fromRole: "user",
-    note: "Fan gifting",
-  },
-  {
-    id: "DR-2025-1111-003",
-    date: "2025-11-11T07:15:00Z",
-    hostId: "H005",
-    host: "Elena Rossi",
-    agencyId: "A001",
-    agency: "Golden Stars",
-    subAdminId: "SA001",
-    subAdmin: "Alex Hartman",
-    type: "withdrawn",
-    amount: 900,
-    fromName: "GlobiLive Treasury",
-    fromRole: "company",
-    note: "Scheduled payout",
-  },
-  {
-    id: "DR-2025-1112-001",
-    date: "2025-11-12T16:05:00Z",
-    hostId: "H004",
-    host: "Noah Smith",
-    agencyId: "A002",
-    agency: "Elite Performers",
-    subAdminId: "SA002",
-    subAdmin: "Maria Garcia",
-    type: "received",
-    amount: 650,
-    fromName: "Elite Performers Agency",
-    fromRole: "agency",
-    note: "Performance bonus",
-  },
-  {
-    id: "DR-2025-1112-005",
-    date: "2025-11-12T21:30:00Z",
-    hostId: "H005",
-    host: "Elena Rossi",
-    agencyId: "A001",
-    agency: "Golden Stars",
-    subAdminId: "SA001",
-    subAdmin: "Alex Hartman",
-    type: "received",
-    amount: 1190,
-    fromName: "BeanStock Resellers",
-    fromRole: "reseller",
-    note: "Referral payout",
-  },
-];
+// Mock records removed for Firestore integration
 
 type Filters = {
   search: string;
@@ -335,33 +126,49 @@ const aggregateByEntity = (records: DiamondRecord[], key: EntityKey): Aggregated
 
 export default function SuperAdminDiamonds() {
   const [filters, setFilters] = useState<Filters>(initialFilters);
+  const [allRecords, setAllRecords] = useState<DiamondRecord[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const q = fbQuery(collection(db, "globiliveDiamondTransactions"), orderBy("date", "desc"));
+    const unsub = onSnapshot(q, (snap) => {
+      const records = snap.docs.map(d => ({
+        id: d.id,
+        ...d.data(),
+        date: (d.data() as any).date?.toDate?.()?.toISOString() || (d.data() as any).date
+      })) as DiamondRecord[];
+      setAllRecords(records);
+      setLoading(false);
+    });
+    return () => unsub();
+  }, []);
 
   const hostOptions = useMemo(() => {
     const unique = new Map<string, string>();
-    DIAMOND_RECORDS.forEach((record) => unique.set(record.hostId, record.host));
+    allRecords.forEach((record) => unique.set(record.hostId, record.host));
     return Array.from(unique.entries()).map(([value, label]) => ({ value, label })).sort((a, b) => a.label.localeCompare(b.label));
-  }, []);
+  }, [allRecords]);
 
   const agencyOptions = useMemo(() => {
     const unique = new Map<string, string>();
-    DIAMOND_RECORDS.forEach((record) => unique.set(record.agencyId, record.agency));
+    allRecords.forEach((record) => unique.set(record.agencyId, record.agency));
     return Array.from(unique.entries()).map(([value, label]) => ({ value, label })).sort((a, b) => a.label.localeCompare(b.label));
-  }, []);
+  }, [allRecords]);
 
   const subAdminOptions = useMemo(() => {
     const unique = new Map<string, string>();
-    DIAMOND_RECORDS.forEach((record) => unique.set(record.subAdminId, record.subAdmin));
+    allRecords.forEach((record) => unique.set(record.subAdminId, record.subAdmin));
     return Array.from(unique.entries()).map(([value, label]) => ({ value, label })).sort((a, b) => a.label.localeCompare(b.label));
-  }, []);
+  }, [allRecords]);
 
   const fromRoleOptions = useMemo(() => {
     const unique = new Set<FromRole>();
-    DIAMOND_RECORDS.forEach((record) => unique.add(record.fromRole));
+    allRecords.forEach((record) => unique.add(record.fromRole));
     return Array.from(unique.values()).sort((a, b) => fromRoleLabels[a].localeCompare(fromRoleLabels[b]));
-  }, []);
+  }, [allRecords]);
 
   const filteredRecords = useMemo(() => {
-    return DIAMOND_RECORDS.filter((record) => {
+    return allRecords.filter((record) => {
       const haystack = `${record.host} ${record.agency} ${record.subAdmin} ${record.fromName}`.toLowerCase();
       const matchesSearch = filters.search ? haystack.includes(filters.search.toLowerCase()) : true;
       if (!matchesSearch) {
@@ -404,7 +211,7 @@ export default function SuperAdminDiamonds() {
 
       return true;
     }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  }, [filters]);
+  }, [allRecords, filters]);
 
   const totals = useMemo(() => {
     return filteredRecords.reduce(

@@ -1,4 +1,7 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
+import { useAuth } from "@/contexts/AuthContext";
+import { db } from "@/lib/firebase";
+import { collection, onSnapshot, query as fbQuery, where, orderBy, limit } from "firebase/firestore";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { MetricCard } from "@/components/MetricCard";
 import {
@@ -92,130 +95,54 @@ const statusVariant: Record<TransactionStatus, "default" | "secondary" | "outlin
   Disputed: "destructive",
 };
 
-const initialTransactions: ResellerTransaction[] = [
-  {
-    id: "RS-8121",
-    direction: "Inbound from Top-Up Agent",
-    counterpartyId: "TPA-009",
-    counterpartyName: "GlobiLive Regional Ops",
-    counterpartyType: "Top-Up Agent",
-    beans: 40000,
-    amount: 880,
-    paymentMethod: "Bank",
-    initiatedAt: "2025-11-13T22:10:00Z",
-    settledAt: "2025-11-13T22:40:00Z",
-    status: "Completed",
-    slipName: "Invoice_RS-8121.pdf",
-    note: "Monthly replenishment", 
-  },
-  {
-    id: "RS-8119",
-    direction: "Outbound to Customer",
-    counterpartyId: "USR-5402",
-    counterpartyName: "Sasha Lin",
-    counterpartyType: "User",
-    beans: 12000,
-    amount: 260,
-    paymentMethod: "Wallet",
-    initiatedAt: "2025-11-13T18:55:00Z",
-    settledAt: "2025-11-13T19:05:00Z",
-    status: "Completed",
-    slipName: "Receipt_RS-8119.jpg",
-    note: "Creator anniversary bundle",
-  },
-  {
-    id: "RS-8116",
-    direction: "Outbound to Customer",
-    counterpartyId: "HST-7720",
-    counterpartyName: "Mira Flores",
-    counterpartyType: "Host",
-    beans: 22000,
-    amount: 480,
-    paymentMethod: "Bank",
-    initiatedAt: "2025-11-12T15:20:00Z",
-    status: "Pending Verification",
-    slipName: "Receipt_RS-8116.png",
-    note: "Awaiting bank confirmation",
-  },
-  {
-    id: "RS-8114",
-    direction: "Inbound from Top-Up Agent",
-    counterpartyId: "TPA-009",
-    counterpartyName: "GlobiLive Regional Ops",
-    counterpartyType: "Top-Up Agent",
-    beans: 30000,
-    amount: 660,
-    paymentMethod: "Wallet",
-    initiatedAt: "2025-11-12T11:00:00Z",
-    settledAt: "2025-11-12T11:25:00Z",
-    status: "Completed",
-    slipName: "Invoice_RS-8114.pdf",
-  },
-  {
-    id: "RS-8109",
-    direction: "Outbound to Customer",
-    counterpartyId: "USR-5210",
-    counterpartyName: "Noah Peters",
-    counterpartyType: "User",
-    beans: 6500,
-    amount: 150,
-    paymentMethod: "Cash",
-    initiatedAt: "2025-11-11T19:40:00Z",
-    settledAt: "2025-11-11T19:55:00Z",
-    status: "Completed",
-    slipName: "Receipt_RS-8109.pdf",
-  },
-  {
-    id: "RS-8103",
-    direction: "Outbound to Customer",
-    counterpartyId: "HST-7601",
-    counterpartyName: "Kyra Halim",
-    counterpartyType: "Host",
-    beans: 18000,
-    amount: 395,
-    paymentMethod: "Bank",
-    initiatedAt: "2025-11-10T09:05:00Z",
-    settledAt: "2025-11-10T09:40:00Z",
-    status: "Processing",
-    slipName: "Receipt_RS-8103.pdf",
-  },
-  {
-    id: "RS-8098",
-    direction: "Inbound from Top-Up Agent",
-    counterpartyId: "TPA-011",
-    counterpartyName: "Metro Bean Desk",
-    counterpartyType: "Top-Up Agent",
-    beans: 20000,
-    amount: 430,
-    paymentMethod: "Bank",
-    initiatedAt: "2025-11-09T16:35:00Z",
-    settledAt: "2025-11-09T17:20:00Z",
-    status: "Disputed",
-    slipName: "Invoice_RS-8098.pdf",
-    note: "Invoice mismatch raised with finance",
-  },
-];
-
-const beanWalletBalance = 84500;
-const cashWalletBalance = 420575;
-const monthToDateOutbound = 11250000;
-const monthToDateCommission = 2265.5;
-
-const resellerProfile = {
-  code: "A001",
-  name: "Velocity Digital",
-  contact: "Fatima Al-Hassan",
-  email: "velocity@resellers.globilive",
-  phone: "+971 52 123 4567",
-  joined: "2024-03-18",
-  license: "RES-2024-45-ALPHA",
-  region: "MENA",
-  lastAudit: "2025-10-28",
-};
+// Constants removed to use Firestore data
 
 export default function ResellerDashboard() {
   const { toast } = useToast();
-  const [transactions] = useState<ResellerTransaction[]>(initialTransactions);
+  const { user } = useAuth();
+  const [transactions, setTransactions] = useState<ResellerTransaction[]>([]);
+  const [resellerProfile, setResellerProfile] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  
+  useEffect(() => {
+    if (!user?.username) return;
+
+    // Fetch Reseller Profile
+    const profileQuery = fbQuery(collection(db, "globiliveResellers"), where("email", "==", user.username), limit(1));
+    const unsubProfile = onSnapshot(profileQuery, (snapshot) => {
+      if (!snapshot.empty) {
+        setResellerProfile(snapshot.docs[0].data());
+      }
+    });
+
+    // Fetch Transactions
+    const transQuery = fbQuery(
+        collection(db, "globiliveResellerTransactions"), 
+        where("resellerEmail", "==", user.username),
+        orderBy("initiatedAt", "desc")
+    );
+    const unsubTrans = onSnapshot(transQuery, (snapshot) => {
+      const list = snapshot.docs.map(d => ({
+        id: d.id,
+        ...d.data()
+      })) as ResellerTransaction[];
+      setTransactions(list);
+      setLoading(false);
+    }, (error) => {
+      console.error("Error fetching transactions:", error);
+      setLoading(false);
+    });
+
+    return () => {
+      unsubProfile();
+      unsubTrans();
+    };
+  }, [user]);
+
+  const beanWalletBalance = resellerProfile?.beans || 0;
+  const cashWalletBalance = resellerProfile?.cashBalance || 0;
+  const monthToDateOutbound = resellerProfile?.monthlyRevenue || 0;
+
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<TransactionStatus | "all">("all");
   const [typeFilter, setTypeFilter] = useState<CounterpartyType | "all">("all");
@@ -480,44 +407,44 @@ export default function ResellerDashboard() {
               <div className="grid gap-4 sm:grid-cols-2">
                 <div>
                   <p className="text-muted-foreground">Reseller name</p>
-                  <p className="font-semibold">{resellerProfile.name}</p>
+                  <p className="font-semibold">{resellerProfile?.name || "—"}</p>
                 </div>
                 <div>
                   <p className="text-muted-foreground">Reseller code</p>
-                  <p className="font-semibold">{resellerProfile.code}</p>
+                  <p className="font-semibold">{resellerProfile?.code || "—"}</p>
                 </div>
                 <div>
                   <p className="text-muted-foreground">Primary contact</p>
-                  <p className="font-semibold">{resellerProfile.contact}</p>
+                  <p className="font-semibold">{resellerProfile?.contact || resellerProfile?.name || "—"}</p>
                 </div>
                 <div>
                   <p className="text-muted-foreground">Email</p>
-                  <p className="font-semibold">{resellerProfile.email}</p>
+                  <p className="font-semibold">{resellerProfile?.email || "—"}</p>
                 </div>
                 <div>
                   <p className="text-muted-foreground">Phone</p>
-                  <p className="font-semibold">{resellerProfile.phone}</p>
+                  <p className="font-semibold">{resellerProfile?.phone || "—"}</p>
                 </div>
                 <div>
                   <p className="text-muted-foreground">Region</p>
-                  <p className="font-semibold">{resellerProfile.region}</p>
+                  <p className="font-semibold">{resellerProfile?.region || "—"}</p>
                 </div>
                 <div>
                   <p className="text-muted-foreground">Account created</p>
-                  <p className="font-semibold">{resellerProfile.joined}</p>
+                  <p className="font-semibold">{resellerProfile?.createdAt ? new Date(resellerProfile.createdAt.seconds * 1000).toLocaleDateString() : "—"}</p>
                 </div>
                 <div>
                   <p className="text-muted-foreground">License</p>
-                  <p className="font-semibold">{resellerProfile.license}</p>
+                  <p className="font-semibold">{resellerProfile?.license || "GLOBI-RES-ACTIVE"}</p>
                 </div>
               </div>
               <div className="flex items-center justify-between rounded-lg border bg-muted/40 p-3 text-sm">
                 <div>
                   <p className="font-semibold">Compliance certified</p>
-                  <p className="text-muted-foreground">Last audit {resellerProfile.lastAudit}</p>
+                  <p className="text-muted-foreground">Status: {resellerProfile?.status || "Active"}</p>
                 </div>
                 <Badge variant="outline" className="gap-2">
-                  <ShieldCheck className="h-4 w-4" /> Active
+                  <ShieldCheck className="h-4 w-4" /> {resellerProfile?.status || "Active"}
                 </Badge>
               </div>
             </CardContent>

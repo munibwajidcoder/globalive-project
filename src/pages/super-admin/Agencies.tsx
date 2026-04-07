@@ -180,10 +180,16 @@ export function AgenciesManagement({ role = "super-admin" }: { role?: Management
 
     // non-super-admin: subscribe to all agencies
     const colRef = collection(db, "globiliveAgencies");
-    const unsub = onSnapshot(colRef, (snap) => {
-      const list = snap.docs.map((d) => mapDoc(d.id, d.data()));
-      if (mounted) setAgencies(list);
-    }, (err) => console.error("agencies onSnapshot error", err));
+    const unsub = onSnapshot(colRef, 
+      (snap) => {
+        const list = snap.docs.map((d) => mapDoc(d.id, d.data()));
+        if (mounted) setAgencies(list);
+      }, 
+      (err) => {
+        console.error("Agencies: onSnapshot error", err);
+        if (mounted) setAgencies([]);
+      }
+    );
 
     return () => {
       mounted = false;
@@ -782,7 +788,22 @@ export function AgenciesManagement({ role = "super-admin" }: { role?: Management
                         </div>
                       </div>
 
-                      <div className="grid gap-4 sm:grid-cols-2">
+                      <div className="grid gap-4 sm:grid-cols-3">
+                        <div className="space-y-2">
+                          <label className="text-xs font-semibold ml-1">Region</label>
+                          <Select value={newAgencyRegion} onValueChange={(val) => setNewAgencyRegion(val)}>
+                            <SelectTrigger className="h-11 rounded-xl px-3 border border-input flex items-center justify-between w-full bg-background">
+                              <SelectValue placeholder="Select Region" />
+                            </SelectTrigger>
+                            <SelectContent className="bg-background border rounded-xl shadow-xl overflow-hidden z-[50]">
+                              {regions.map((r) => (
+                                <SelectItem key={r} value={r} className="p-2 hover:bg-muted cursor-pointer">
+                                  {r}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
                         <div className="space-y-2">
                           <label className="text-xs font-semibold ml-1">Commission Share %</label>
                           <Input
@@ -797,11 +818,11 @@ export function AgenciesManagement({ role = "super-admin" }: { role?: Management
                           <label className="text-xs font-semibold ml-1">Initial Status</label>
                           <Select value={newAgencyStatus} onValueChange={(val) => setNewAgencyStatus(val)}>
                             <SelectTrigger className="h-11 rounded-xl px-3 border border-input flex items-center justify-between w-full bg-background">
-                              <SelectValue placeholder="Select Status" />
+                                <SelectValue placeholder="Select Status" />
                             </SelectTrigger>
-                            <SelectContent className="bg-background border rounded-xl shadow-xl overflow-hidden">
-                              <SelectItem value="Active" className="p-2 hover:bg-muted cursor-pointer">Active</SelectItem>
-                              <SelectItem value="Inactive" className="p-2 hover:bg-muted cursor-pointer">Inactive</SelectItem>
+                            <SelectContent className="bg-background border rounded-xl shadow-xl overflow-hidden z-[50]">
+                                <SelectItem value="Active" className="p-2 hover:bg-muted cursor-pointer">Active</SelectItem>
+                                <SelectItem value="Inactive" className="p-2 hover:bg-muted cursor-pointer">Inactive</SelectItem>
                             </SelectContent>
                           </Select>
                         </div>

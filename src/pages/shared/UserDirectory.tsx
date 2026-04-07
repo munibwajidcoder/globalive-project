@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { db } from "@/lib/firebase";
-import { collection, onSnapshot, doc, updateDoc } from "firebase/firestore";
+import { collection, onSnapshot, doc, updateDoc, addDoc } from "firebase/firestore";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import EnhancedTable from "@/components/ui/EnhancedTable";
@@ -37,7 +38,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Eye, MoreHorizontal, ShieldBan, UserX } from "lucide-react";
+import { Eye, MoreHorizontal, Plus, ShieldBan, UserX } from "lucide-react";
 import { toast } from "@/components/ui/use-toast";
 
 type RoleId = "company" | "super-admin" | "sub-admin" | "agency" | "reseller" | "topup-agent";
@@ -94,6 +95,16 @@ export function UserDirectory({ role, title = "Users", description }: UserDirect
   const [selectedUser, setSelectedUser] = useState<DirectoryUser | null>(null);
   const [viewOpen, setViewOpen] = useState(false);
   const [blockDialogOpen, setBlockDialogOpen] = useState(false);
+  const [addUserOpen, setAddUserOpen] = useState(false);
+  const [newUserData, setNewUserData] = useState({
+    name: "",
+    email: "",
+    yeahLiveId: "",
+    beans: 0,
+    diamonds: 0,
+    password: ""
+  });
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const effectiveDescription = useMemo(
     () => description ?? roleDescriptions[role],
@@ -103,46 +114,52 @@ export function UserDirectory({ role, title = "Users", description }: UserDirect
   useEffect(() => {
     // Subscribe to Firestore users and update local state
     const usersRef = collection(db, "globiliveUsers");
-    const unsub = onSnapshot(usersRef, (snapshot) => {
-      const filteredDocs = role === "company" 
-        ? snapshot.docs.filter((d) => {
-            const data = d.data() as any;
-            return !data.isHost && data.role !== "host" && !data.agencyId;
-          })
-        : snapshot.docs;
+    const unsub = onSnapshot(usersRef, 
+      (snapshot) => {
+        const filteredDocs = role === "company" 
+          ? snapshot.docs.filter((d) => {
+              const data = d.data() as any;
+              return !data.isHost && data.role !== "host" && !data.agencyId;
+            })
+          : snapshot.docs;
 
-      const docs = filteredDocs.map((d) => {
-        const data = d.data() as any;
-        const rawStatus = data.status as string | undefined;
-        let status: "Active" | "Blocked" | "Suspended" = "Active";
-        if (rawStatus === 'suspend' || rawStatus === 'Suspended' || data.isSuspended) status = 'Suspended';
-        else if (rawStatus === 'blocked' || rawStatus === 'Blocked' || data.isBlocked) status = 'Blocked';
+        const docs = filteredDocs.map((d) => {
+          const data = d.data() as any;
+          const rawStatus = data.status as string | undefined;
+          let status: "Active" | "Blocked" | "Suspended" = "Active";
+          if (rawStatus === 'suspend' || rawStatus === 'Suspended' || data.isSuspended) status = 'Suspended';
+          else if (rawStatus === 'blocked' || rawStatus === 'Blocked' || data.isBlocked) status = 'Blocked';
 
-        return {
-          docId: d.id,
-          id: data.yeahLiveId ?? data.userId ?? d.id,
-          name: data.name ?? data.email ?? "-",
-          contact: data.email ?? "",
-          beans: Number(data.beans ?? 0),
-          diamonds: Number(data.diamonds ?? 0),
-          status,
-          blockedUntil: data.blockedUntil ?? null,
-          joinedDate: data.createdAt ? new Date(data.createdAt).toLocaleDateString() : "10/23/2024",
-          friends: Array.isArray(data.friends) ? data.friends.length : 0,
-          likes: data.likes ?? 0,
-          shares: data.shares ?? 0,
-          views: data.views ?? 0,
-          liveStatus: data.isLive ? "Live" : "Offline",
-          gamesStatus: data.gamesStatus ?? "Inactive",
-          gamesWon: data.gamesWon ?? 0,
-          gamesLost: data.gamesLost ?? 0,
-          beanTransactions: data.beanTransactions ?? [],
-          diamondTransactions: data.diamondTransactions ?? [],
-        } as DirectoryUser;
-      });
+          return {
+            docId: d.id,
+            id: data.yeahLiveId ?? data.userId ?? d.id,
+            name: data.name ?? data.email ?? "-",
+            contact: data.email ?? "",
+            beans: Number(data.beans ?? 0),
+            diamonds: Number(data.diamonds ?? 0),
+            status,
+            blockedUntil: data.blockedUntil ?? null,
+            joinedDate: data.createdAt ? new Date(data.createdAt).toLocaleDateString() : "10/23/2024",
+            friends: Array.isArray(data.friends) ? data.friends.length : 0,
+            likes: data.likes ?? 0,
+            shares: data.shares ?? 0,
+            views: data.views ?? 0,
+            liveStatus: data.isLive ? "Live" : "Offline",
+            gamesStatus: data.gamesStatus ?? "Inactive",
+            gamesWon: data.gamesWon ?? 0,
+            gamesLost: data.gamesLost ?? 0,
+            beanTransactions: data.beanTransactions ?? [],
+            diamondTransactions: data.diamondTransactions ?? [],
+          } as DirectoryUser;
+        });
 
-      setUsers(docs);
-    });
+        setUsers(docs);
+      },
+      (error) => {
+        console.error("UserDirectory: Error fetching users:", error);
+        setUsers([]); // Fallback to empty list
+      }
+    );
 
     return () => unsub();
 
@@ -243,6 +260,44 @@ export function UserDirectory({ role, title = "Users", description }: UserDirect
     })();
   };
 
+  const handleAddUser = async () => {
+    if (!newUserData.name || !newUserData.email || !newUserData.password) {
+        toast({ title: "Required Fields", description: "Name, Email and Password are required.", variant: "destructive" });
+        return;
+    }
+    setIsSubmitting(true);
+    try {
+        const userRef = collection(db, "globiliveUsers");
+        await addDoc(userRef, {
+            ...newUserData,
+            role: "user",
+            status: "active",
+            createdAt: new Date().toISOString(),
+            isBlocked: false,
+            isSuspended: false,
+            friends: [],
+            likes: 0,
+            shares: 0,
+            views: 0,
+            isLive: false,
+            gamesWon: 0,
+            gamesLost: 0,
+            beanTransactions: [],
+            diamondTransactions: []
+        });
+        toast({ title: "User Created", description: `${newUserData.name} has been added successfully.` });
+        setSetNewUserData({ name: "", email: "", yeahLiveId: "", beans: 0, diamonds: 0, password: "" });
+        setAddUserOpen(false);
+    } catch (err) {
+        console.error("Error creating user:", err);
+        toast({ title: "Create Failed", description: "Could not create user account.", variant: "destructive" });
+    } finally {
+        setIsSubmitting(false);
+    }
+  };
+
+  const setSetNewUserData = (data: any) => setNewUserData(data);
+
   const renderStatusBadge = (user: DirectoryUser) => {
     if (user.status === "Suspended") {
       return <Badge variant="secondary">Suspended</Badge>;
@@ -261,9 +316,14 @@ export function UserDirectory({ role, title = "Users", description }: UserDirect
   return (
     <DashboardLayout role={role}>
       <div className="space-y-6 animate-fade-in">
-        <div className="space-y-1">
-          <h2 className="text-3xl font-bold tracking-tight">{title}</h2>
-          <p className="text-muted-foreground">{effectiveDescription}</p>
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+          <div className="space-y-1">
+            <h2 className="text-3xl font-bold tracking-tight">{title}</h2>
+            <p className="text-muted-foreground">{effectiveDescription}</p>
+          </div>
+          <Button onClick={() => setAddUserOpen(true)} className="gradient-primary">
+            <Plus className="mr-2 h-4 w-4" /> Add User
+          </Button>
         </div>
 
         <Card className="border-none shadow-premium bg-card/50">
@@ -530,6 +590,77 @@ export function UserDirectory({ role, title = "Users", description }: UserDirect
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <Dialog open={addUserOpen} onOpenChange={setAddUserOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Create New User</DialogTitle>
+            <DialogDescription>
+              Manually register a new user account with initial balances.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Display Name</label>
+              <Input 
+                placeholder="John Doe" 
+                value={newUserData.name} 
+                onChange={(e) => setNewUserData({...newUserData, name: e.target.value})} 
+              />
+            </div>
+            <div className="grid gap-2">
+              <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Email Address</label>
+              <Input 
+                type="email" 
+                placeholder="john@example.com" 
+                value={newUserData.email} 
+                onChange={(e) => setNewUserData({...newUserData, email: e.target.value})} 
+              />
+            </div>
+            <div className="grid gap-2">
+              <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Account Password</label>
+              <Input 
+                type="password" 
+                placeholder="••••••••" 
+                value={newUserData.password} 
+                onChange={(e) => setNewUserData({...newUserData, password: e.target.value})} 
+              />
+            </div>
+            <div className="grid gap-2">
+              <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Global ID (Optional)</label>
+              <Input 
+                placeholder="GLB-1002" 
+                value={newUserData.yeahLiveId} 
+                onChange={(e) => setNewUserData({...newUserData, yeahLiveId: e.target.value})} 
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+                <div className="grid gap-2">
+                    <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Initial Beans</label>
+                    <Input 
+                        type="number" 
+                        value={newUserData.beans} 
+                        onChange={(e) => setNewUserData({...newUserData, beans: Number(e.target.value)})} 
+                    />
+                </div>
+                <div className="grid gap-2">
+                    <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Initial Diamonds</label>
+                    <Input 
+                        type="number" 
+                        value={newUserData.diamonds} 
+                        onChange={(e) => setNewUserData({...newUserData, diamonds: Number(e.target.value)})} 
+                    />
+                </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAddUserOpen(false)} disabled={isSubmitting}>Cancel</Button>
+            <Button onClick={handleAddUser} disabled={isSubmitting} className="gradient-primary">
+              {isSubmitting ? "Creating..." : "Register User"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </DashboardLayout>
   );
 }
